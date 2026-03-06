@@ -71,7 +71,7 @@ export function useScriptDrafts() {
     title?: string;
     script_text?: string;
     style_id?: string;
-    source_type?: 'topic' | 'reference';
+    source_type?: 'topic' | 'reference' | 'quick';
     source_data?: Record<string, unknown>;
     chat_history?: ChatMessage[];
   }): Promise<ScriptDraft | null> => {

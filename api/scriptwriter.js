@@ -40,6 +40,8 @@ export default async function handler(req, res) {
       return handleAssembleScript(req, res);
     case 'improve-script':
       return handleImproveScript(req, res);
+    case 'quick-generate':
+      return handleQuickGenerate(req, res);
     default:
       return res.status(400).json({ error: 'Unknown action' });
   }
@@ -586,7 +588,7 @@ ${feedback?.trim() ? `\nКОММЕНТАРИЙ:\n«${feedback.trim()}»\n` : ''}
 // ── Шаг 1: Уточнение темы (3 вопроса) ───────────────────────────────────────
 
 async function handleClarifyTopic(req, res) {
-  const { prompt, topic, structure_analysis } = req.body;
+  const { prompt, topic, structure_analysis, reference_transcript } = req.body;
   if (!prompt?.trim() || !topic?.trim()) {
     return res.status(400).json({ error: 'prompt and topic are required' });
   }
@@ -601,13 +603,17 @@ async function handleClarifyTopic(req, res) {
     if (structure_analysis.avgLengthSeconds) structureHint += `\nЦелевая длительность: ~${structure_analysis.avgLengthSeconds} сек`;
   }
 
+  const refHint = reference_transcript?.trim()
+    ? `\n\nРЕФЕРЕНС-СЦЕНАРИЙ (транскрипт видео, который пользователь хочет адаптировать):\n---\n${reference_transcript.trim().slice(0, 3000)}\n---`
+    : '';
+
   const userText = `Ты ИИ-сценарист. Пользователь хочет создать сценарий короткого видео (рилс/шортс).
 
 ТВОЙ ПОДЧЕРК (промт):
 ---
 ${prompt.trim()}
 ---
-${structureHint}
+${structureHint}${refHint}
 
 ТЕМА ПОЛЬЗОВАТЕЛЯ: «${topic.trim()}»
 
@@ -645,7 +651,7 @@ ${structureHint}
 // ── Шаг 2: Генерация 5 вариантов хуков ──────────────────────────────────────
 
 async function handleGenerateHooks(req, res) {
-  const { prompt, topic, answers, structure_analysis } = req.body;
+  const { prompt, topic, answers, structure_analysis, reference_transcript, feedback, previous_hooks } = req.body;
   if (!prompt?.trim() || !topic?.trim()) {
     return res.status(400).json({ error: 'prompt and topic are required' });
   }
@@ -662,6 +668,15 @@ async function handleGenerateHooks(req, res) {
     ? '\n\nОТВЕТЫ ПОЛЬЗОВАТЕЛЯ НА УТОЧНЕНИЯ:\n' + answers.map((a, i) => `${i + 1}. ${a}`).join('\n')
     : '';
 
+  const refHint = reference_transcript?.trim()
+    ? `\n\nРЕФЕРЕНС-СЦЕНАРИЙ:\n${reference_transcript.trim().slice(0, 2000)}`
+    : '';
+
+  let feedbackHint = '';
+  if (feedback?.trim() && Array.isArray(previous_hooks) && previous_hooks.length) {
+    feedbackHint = `\n\nПРЕДЫДУЩИЕ ХУКИ (пользователю не понравились):\n${previous_hooks.map((h, i) => `${i + 1}. ${typeof h === 'string' ? h : h.text || ''}`).join('\n')}\n\nОБРАТНАЯ СВЯЗЬ: «${feedback.trim()}»\n\nСгенерируй НОВЫЕ хуки, учитывая фидбек. НЕ повторяй предыдущие.`;
+  }
+
   const userText = `Ты ИИ-сценарист коротких видео (рилсы/шортсы).
 
 ПОДЧЕРК:
@@ -670,7 +685,7 @@ ${prompt.trim()}
 ---
 ${structureHint}
 
-ТЕМА: «${topic.trim()}»${answersText}
+ТЕМА: «${topic.trim()}»${answersText}${refHint}${feedbackHint}
 
 Сгенерируй РОВНО 5 разных вариантов ХУКОВ (первые 1-3 предложения сценария, которые цепляют внимание).
 Каждый хук должен быть в стиле подчерка, но с разным подходом к привлечению внимания.
@@ -701,7 +716,7 @@ ${structureHint}
 // ── Шаг 3: Генерация 3 вариантов тела ───────────────────────────────────────
 
 async function handleGenerateBody(req, res) {
-  const { prompt, topic, answers, selected_hook, structure_analysis } = req.body;
+  const { prompt, topic, answers, selected_hook, structure_analysis, reference_transcript, feedback, previous_bodies } = req.body;
   if (!prompt?.trim() || !topic?.trim() || !selected_hook?.trim()) {
     return res.status(400).json({ error: 'prompt, topic and selected_hook are required' });
   }
@@ -719,6 +734,15 @@ async function handleGenerateBody(req, res) {
     ? '\n\nОТВЕТЫ ПОЛЬЗОВАТЕЛЯ:\n' + answers.map((a, i) => `${i + 1}. ${a}`).join('\n')
     : '';
 
+  const refHint = reference_transcript?.trim()
+    ? `\n\nРЕФЕРЕНС-СЦЕНАРИЙ:\n${reference_transcript.trim().slice(0, 2000)}`
+    : '';
+
+  let feedbackHint = '';
+  if (feedback?.trim() && Array.isArray(previous_bodies) && previous_bodies.length) {
+    feedbackHint = `\n\nПРЕДЫДУЩИЕ ВАРИАНТЫ ТЕЛА (не понравились):\n${previous_bodies.map((b, i) => `${i + 1}. ${(typeof b === 'string' ? b : b.text || '').slice(0, 300)}`).join('\n')}\n\nОБРАТНАЯ СВЯЗЬ: «${feedback.trim()}»\n\nСгенерируй НОВЫЕ варианты, учитывая фидбек. НЕ повторяй предыдущие.`;
+  }
+
   const userText = `Ты ИИ-сценарист коротких видео.
 
 ПОДЧЕРК:
@@ -727,7 +751,7 @@ ${prompt.trim()}
 ---
 ${structureHint}
 
-ТЕМА: «${topic.trim()}»${answersText}
+ТЕМА: «${topic.trim()}»${answersText}${refHint}${feedbackHint}
 
 ВЫБРАННЫЙ ХУК:
 «${selected_hook.trim()}»
@@ -855,6 +879,48 @@ ${script_text.trim()}
     return res.status(200).json({ success: true, script: rawText.trim() });
   } catch (err) {
     console.error('scriptwriter improve-script error:', err);
+    return res.status(502).json({ error: 'OpenRouter API error', details: err.message });
+  }
+}
+
+// ── Быстрая генерация: тема → сразу полный сценарий ──────────────────────────
+
+async function handleQuickGenerate(req, res) {
+  const { prompt, topic, structure_analysis, reference_transcript } = req.body;
+  if (!prompt?.trim() || !topic?.trim()) {
+    return res.status(400).json({ error: 'prompt and topic are required' });
+  }
+  if (!OPENROUTER_API_KEY) return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+
+  let systemText = prompt.trim();
+  if (structure_analysis) {
+    systemText += '\n\n--- СТРУКТУРА СЦЕНАРИЯ ---';
+    if (structure_analysis.hookDescription) systemText += `\nХук: ${structure_analysis.hookDescription} (${structure_analysis.hookDuration || '?'})`;
+    if (structure_analysis.bodyPhases?.length) systemText += `\nФазы тела: ${structure_analysis.bodyPhases.join(' → ')}`;
+    if (structure_analysis.ctaType) systemText += `\nCTA: ${structure_analysis.ctaType}`;
+    if (structure_analysis.avgLengthSeconds) systemText += `\nЦелевая длительность: ~${structure_analysis.avgLengthSeconds} сек`;
+    if (structure_analysis.specialFeatures?.length) systemText += `\nОсобенности: ${structure_analysis.specialFeatures.join(', ')}`;
+  }
+
+  const refHint = reference_transcript?.trim()
+    ? `\n\nРЕФЕРЕНС-СЦЕНАРИЙ (адаптируй под тему):\n${reference_transcript.trim().slice(0, 3000)}`
+    : '';
+
+  const userText = `Тема/идея для сценария:\n${topic.trim()}${refHint}\n\nНапиши полный сценарий по этой теме, строго следуя стилю и структуре из промта. Включи яркий хук, основное тело с фазами, и CTA если предусмотрен подчерком. Выводи только текст сценария, без пояснений.`;
+
+  try {
+    const rawText = await callWithFallback(
+      [MODELS.PRO_3, ...MODELS_FALLBACK],
+      [
+        { role: 'system', content: systemText },
+        { role: 'user', content: userText },
+      ],
+      { temperature: 0.5 }
+    );
+    if (!rawText?.trim()) return res.status(502).json({ error: 'Empty response' });
+    return res.status(200).json({ success: true, script: rawText.trim() });
+  } catch (err) {
+    console.error('scriptwriter quick-generate error:', err);
     return res.status(502).json({ error: 'OpenRouter API error', details: err.message });
   }
 }
