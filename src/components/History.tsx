@@ -8,6 +8,7 @@ import { cn } from '../utils/cn';
 import { toast } from 'sonner';
 import { VideoGradientCard } from './ui/VideoGradientCard';
 import { MarketingBadges, searchBadges } from './ui/MarketingBadges';
+import { DuplicateVideoModal } from './ui/DuplicateVideoModal';
 
 type TabType = 'queries' | 'videos';
 
@@ -98,13 +99,13 @@ export function History() {
   const [selectedEntry, setSelectedEntry] = useState<SearchHistoryEntry | null>(null);
   const { historyEntries, removeFromHistory, clearHistory } = useSearchHistory();
   const { incomingVideos } = useFlowStore();
-  const { addVideoToInbox, removeVideo, refreshThumbnail, saveThumbnailFromUrl } = useInboxVideos();
+  const { addVideoToInbox, removeVideo, refreshThumbnail, saveThumbnailFromUrl, duplicateVideoPrompt, resolveDuplicateVideoPrompt } = useInboxVideos();
 
   const handleAddToInbox = async (reel: InstagramSearchResult) => {
     const captionText = typeof reel.caption === 'string' ? reel.caption : 'Видео из Instagram';
     
     try {
-      await addVideoToInbox({
+      const savedVideo = await addVideoToInbox({
         title: captionText,
         previewUrl: reel.thumbnail_url || reel.display_url || '',
         url: reel.url,
@@ -113,8 +114,11 @@ export function History() {
         commentCount: reel.comment_count,
         ownerUsername: reel.owner?.username,
       });
-      toast.success('Видео добавлено', {
-        description: `@${reel.owner?.username || 'instagram'}`,
+      if (!savedVideo) return;
+      toast.success(savedVideo.saveAction === 'updated' ? 'Видео обновлено' : 'Видео добавлено', {
+        description: savedVideo.saveAction === 'updated'
+          ? 'Обновили существующую запись'
+          : `@${reel.owner?.username || 'instagram'}`,
       });
     } catch (err) {
       console.error('Ошибка сохранения видео:', err);
@@ -399,6 +403,10 @@ export function History() {
           )}
         </div>
       </div>
+      <DuplicateVideoModal
+        prompt={duplicateVideoPrompt}
+        onResolve={resolveDuplicateVideoPrompt}
+      />
     </div>
   );
 }

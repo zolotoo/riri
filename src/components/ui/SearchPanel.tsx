@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 import { TokenBadge } from './TokenBadge';
 import { getTokenCost } from '../../constants/tokenCosts';
 import { panelEnter } from '../../utils/motionPresets';
+import { DuplicateVideoModal } from './DuplicateVideoModal';
 
 /** Скрыть вкладку "Поиск по слову" (функционал остаётся в коде, можно вернуть) */
 export const HIDE_SEARCH_BY_WORD = true;
@@ -181,7 +182,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
   const { incomingVideos } = useFlowStore();
-  const { addVideoToInbox, videos: inboxVideos } = useInboxVideos();
+  const { addVideoToInbox, videos: inboxVideos, duplicateVideoPrompt, resolveDuplicateVideoPrompt } = useInboxVideos();
   const { addCarousel } = useCarousels();
   const { history: searchHistory, addToHistory, refetch: refetchHistory, getTodayCache, getAllResultsByQuery } = useSearchHistory();
   useWorkspaceZones(); // keep hook for potential future use
@@ -602,7 +603,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
     const folderName = folderConfigs.find(f => f.id === folderId)?.title || 'Идеи';
     
     try {
-      await addVideoToInbox({
+      const savedVideo = await addVideoToInbox({
         title: captionText,
         previewUrl: result.thumbnail_url || result.display_url || '',
         url: result.url,
@@ -615,8 +616,9 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
         folderId: folderId === 'all' ? undefined : folderId,
         takenAt: result.taken_at,
       });
+      if (!savedVideo) return;
       toast.success(`Добавлено в "${folderName}"`, {
-        description: `Проект: ${currentProjectName} • @${result.owner?.username || 'instagram'}`,
+        description: `${savedVideo.saveAction === 'updated' ? 'Обновили существующее видео' : 'Проект: ' + currentProjectName} • @${result.owner?.username || 'instagram'}`,
       });
     } catch (err) {
       console.error('Ошибка сохранения видео:', err);
@@ -751,7 +753,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
           const cost = getTokenCost('link_add');
           // Рилс — сохраняем в "Все видео"
           const captionText = typeof data.caption === 'string' ? data.caption : 'Видео из Instagram';
-          await addVideoToInbox({
+          const savedVideo = await addVideoToInbox({
             title: captionText,
             previewUrl: data.thumbnail_url || '',
             url: data.url,
@@ -764,6 +766,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
             folderId: undefined,
             takenAt: data.taken_at,
           });
+          if (!savedVideo) return;
           if (mountedRef.current) {
             await deduct(cost);
             setLinkPreview({
@@ -781,9 +784,14 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
               is_carousel: false,
             });
           }
-          toast.success(`Сохранено в "${currentProjectName}"`, {
-            description: 'Видео добавлено в "Все видео". Можете переместить в папку.',
-          });
+          toast.success(
+            savedVideo.saveAction === 'updated' ? 'Видео уже было в проекте' : `Сохранено в "${currentProjectName}"`,
+            {
+              description: savedVideo.saveAction === 'updated'
+                ? 'Обновили данные существующей записи'
+                : 'Видео добавлено в "Все видео". Можете переместить в папку.',
+            }
+          );
         }
       } else {
         toast.error(data.error || 'Не удалось получить данные поста');
@@ -813,7 +821,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
     if (folderId) {
       try {
         // Обновляем папку видео через addVideoToInbox (он сделает update если видео уже есть)
-        await addVideoToInbox({
+        const savedVideo = await addVideoToInbox({
           title: typeof linkPreview.caption === 'string' ? linkPreview.caption : 'Видео из Instagram',
           previewUrl: linkPreview.thumbnail_url || linkPreview.display_url || '',
           url: linkPreview.url,
@@ -826,9 +834,12 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
           folderId: folderId,
           takenAt: linkPreview.taken_at,
         });
+        if (!savedVideo) return;
         
-        toast.success(`Перемещено в "${folderName}"`, {
-          description: `@${linkPreview.owner?.username || 'instagram'}`,
+        toast.success(savedVideo.saveAction === 'updated' ? `Обновлено в "${folderName}"` : `Перемещено в "${folderName}"`, {
+          description: savedVideo.saveAction === 'updated'
+            ? 'Обновили существующее видео и его папку'
+            : `@${linkPreview.owner?.username || 'instagram'}`,
         });
       } catch (err) {
         console.error('Ошибка перемещения:', err);
@@ -862,7 +873,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
     
     try {
       // Всегда используем addVideoToInbox для сохранения в Supabase
-      await addVideoToInbox({
+      const savedVideo = await addVideoToInbox({
         title: captionText,
         previewUrl: result.thumbnail_url || result.display_url || '',
         url: result.url,
@@ -875,12 +886,15 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
         folderId: folderId === 'all' ? undefined : folderId, // 'all' = Все видео = без папки
         takenAt: result.taken_at,
       });
+      if (!savedVideo) return;
       
       setShowFolderSelect(false);
       setSelectedVideo(null);
       setCardFolderSelect(null);
-      toast.success(`Добавлено в "${folderName}"`, {
-        description: `Проект: ${activeProjectName} • @${result.owner?.username || 'instagram'}`,
+      toast.success(savedVideo.saveAction === 'updated' ? `Обновлено в "${folderName}"` : `Добавлено в "${folderName}"`, {
+        description: savedVideo.saveAction === 'updated'
+          ? 'Обновили существующее видео'
+          : `Проект: ${activeProjectName} • @${result.owner?.username || 'instagram'}`,
       });
     } catch (err) {
       console.error('Ошибка добавления в папку:', err);
@@ -908,6 +922,8 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
       
       if (savedVideo) {
         e.dataTransfer.setData('application/reactflow/video', JSON.stringify(savedVideo));
+      } else {
+        e.preventDefault();
       }
     } catch (err) {
       // Если не удалось сохранить, используем временный объект
@@ -2412,6 +2428,10 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
           )}
         </div>
       </div>
+      <DuplicateVideoModal
+        prompt={duplicateVideoPrompt}
+        onResolve={resolveDuplicateVideoPrompt}
+      />
     </div>
   );
 }

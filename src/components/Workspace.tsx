@@ -22,6 +22,7 @@ import { dialogScale, dialogSlideUp, backdropFade, iosSpringSoft } from '../util
 import { TokenBadge } from './ui/TokenBadge';
 import { GlassFolderIcon } from './ui/GlassFolderIcons';
 import { getTokenCost } from '../constants/tokenCosts';
+import { DuplicateVideoModal } from './ui/DuplicateVideoModal';
 
 
 function formatNumber(num?: number): string {
@@ -182,7 +183,7 @@ export function Workspace(_props?: WorkspaceProps) {
     }
   }, [currentProjectId]);
   
-  const { videos: inboxVideos, folderCounts, removeVideo: removeInboxVideo, restoreVideo, updateVideoFolder, loadMore, hasMore, loadingMore, refetch: refetchInboxVideos, refreshThumbnail, saveThumbnailFromUrl, addVideoToInbox } = useInboxVideos({
+  const { videos: inboxVideos, folderCounts, removeVideo: removeInboxVideo, restoreVideo, updateVideoFolder, loadMore, hasMore, loadingMore, refetch: refetchInboxVideos, refreshThumbnail, saveThumbnailFromUrl, addVideoToInbox, duplicateVideoPrompt, resolveDuplicateVideoPrompt } = useInboxVideos({
     folderId: selectedFolderId,
     sortBy,
   });
@@ -918,12 +919,12 @@ export function Workspace(_props?: WorkspaceProps) {
       <div className="h-full min-h-0 overflow-hidden relative flex flex-col">
       {/* Floating Folder Widget - Desktop */}
       <div className={cn(
-        "hidden md:block absolute top-4 right-4 z-40 bg-white/88 backdrop-blur-glass-xl rounded-card-xl shadow-glass-lg border border-white/70 transition-all duration-300",
+        "hidden md:block absolute top-4 right-4 z-40 bg-[#f8f8fa] rounded-card-xl shadow-[0_20px_48px_rgba(15,23,42,0.16)] border border-slate-200 transition-all duration-300 overflow-hidden isolate",
         isFolderWidgetOpen ? "w-56" : "w-auto"
       )}>
         {/* Widget Header */}
           <div 
-          className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/95 rounded-t-card-xl transition-colors"
+          className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50 rounded-t-card-xl transition-colors"
           onClick={() => setIsFolderWidgetOpen(!isFolderWidgetOpen)}
         >
           <div className="flex items-center gap-2">
@@ -939,23 +940,25 @@ export function Workspace(_props?: WorkspaceProps) {
         
         {/* Widget Content */}
         {isFolderWidgetOpen && (
-          <div className="px-2 pb-3 flex flex-col max-h-[min(60vh,400px)] min-h-0 bg-white/82 rounded-b-card-xl">
+          <div className="px-2 pb-3 flex flex-col max-h-[min(60vh,400px)] min-h-0 bg-[#f8f8fa] rounded-b-card-xl">
             {contentSection === 'carousels' ? (
               <>
                 {/* Все карусели */}
                 <button
                   onClick={() => setSelectedCarouselFolderId(null)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-card transition-all text-left mb-2 shrink-0",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-card transition-all text-left mb-2 shrink-0 border",
                     selectedCarouselFolderId === null 
-                      ? "bg-white text-slate-800 border border-white/80 shadow-glass-sm" 
-                      : "hover:bg-white/82 text-slate-700"
+                      ? "bg-white text-slate-900 border-slate-200 shadow-sm" 
+                      : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
                   )}
                 >
-                  <GlassFolderIcon iconType="inbox" color="#64748b" size={22} simple />
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <GlassFolderIcon iconType="inbox" color="#64748b" size={22} simple />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium block truncate">Все карусели</span>
-                    <span className="text-xs text-slate-400 tabular-nums">{carousels.length} каруселей</span>
+                    <span className="text-xs text-slate-600 tabular-nums">{carousels.length} каруселей</span>
                   </div>
                 </button>
                 <div className="my-3 shrink-0" aria-hidden />
@@ -968,14 +971,16 @@ export function Workspace(_props?: WorkspaceProps) {
                         key={folder.id}
                         onClick={() => setSelectedCarouselFolderId(folder.id)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left",
-                          isSelected ? "bg-white border border-white/80 shadow-glass-sm" : "hover:bg-white/80 text-slate-700"
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left border",
+                          isSelected ? "bg-white border-slate-200 shadow-sm" : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
                         )}
                       >
-                        <GlassFolderIcon iconType={folder.iconType} color={folder.color} size={22} simple />
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <GlassFolderIcon iconType={folder.iconType} color={folder.color} size={22} simple />
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <span className={cn("text-sm font-medium block truncate", isSelected && "text-slate-800")}>{folder.title}</span>
-                          <span className="text-xs text-slate-400 tabular-nums">{count} каруселей</span>
+                          <span className={cn("text-sm font-medium block truncate text-slate-800", isSelected && "text-slate-900")}>{folder.title}</span>
+                          <span className="text-xs text-slate-600 tabular-nums">{count} каруселей</span>
                         </div>
                       </button>
                     );
@@ -988,16 +993,18 @@ export function Workspace(_props?: WorkspaceProps) {
                 <button
                   onClick={() => setSelectedFolderId(null)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-card transition-all text-left mb-2 shrink-0",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-card transition-all text-left mb-2 shrink-0 border",
                     selectedFolderId === null 
-                      ? "bg-white text-slate-800 border border-white/80 shadow-glass-sm" 
-                      : "hover:bg-white/82 text-slate-700"
+                      ? "bg-white text-slate-900 border-slate-200 shadow-sm" 
+                      : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
                   )}
                 >
-                  <GlassFolderIcon iconType="inbox" color="#64748b" size={22} simple />
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <GlassFolderIcon iconType="inbox" color="#64748b" size={22} simple />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium block truncate">Все видео</span>
-                    <span className="text-xs text-slate-400 tabular-nums">{totalVideos} видео</span>
+                    <span className="text-xs text-slate-600 tabular-nums">{totalVideos} видео</span>
                   </div>
                 </button>
                 <div className="my-3 shrink-0" aria-hidden />
@@ -1005,21 +1012,21 @@ export function Workspace(_props?: WorkspaceProps) {
                   {folderConfigs.map(folder => {
                     const count = getVideoCountInFolder(folder.id);
                     const isSelected = selectedFolderId === folder.id;
-                    const isRejected = folder.iconType === 'rejected';
                     return (
                       <button
                         key={folder.id}
                         onClick={() => setSelectedFolderId(folder.id)}
                         className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left",
-                          isSelected ? "bg-white border border-white/80 shadow-glass-sm" : "hover:bg-white/80 text-slate-700",
-                          isRejected && "opacity-70"
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-left border",
+                          isSelected ? "bg-white border-slate-200 shadow-sm" : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
                         )}
                       >
-                        <GlassFolderIcon iconType={folder.iconType} color={folder.color} size={22} simple />
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <GlassFolderIcon iconType={folder.iconType} color={folder.color} size={22} simple />
+                        </div>
                         <div className="flex-1 min-w-0">
-                          <span className={cn("text-sm font-medium block truncate", isSelected && "text-slate-800")}>{folder.title}</span>
-                          <span className="text-xs text-slate-400 tabular-nums">{count} видео</span>
+                          <span className={cn("text-sm font-medium block truncate text-slate-800", isSelected && "text-slate-900")}>{folder.title}</span>
+                          <span className="text-xs text-slate-600 tabular-nums">{count} видео</span>
                         </div>
                       </button>
                     );
@@ -1027,12 +1034,14 @@ export function Workspace(_props?: WorkspaceProps) {
                 </div>
               </>
             )}
-            <div className="my-3 shrink-0" aria-hidden />
+            <div className="my-3 shrink-0 border-t border-slate-100" aria-hidden />
             <button
               onClick={() => setShowFolderSettings(true)}
-              className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-xl hover:bg-white/82 active:bg-white text-slate-700 text-sm transition-colors touch-manipulation shrink-0"
+              className="w-full flex items-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-800 text-sm font-medium transition-colors touch-manipulation shrink-0 border border-slate-200"
             >
-              <Settings className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <Settings className="w-4 h-4" />
+              </div>
               {contentSection === 'carousels' ? 'Настроить папки каруселей' : 'Настроить папки'}
             </button>
           </div>
@@ -1354,7 +1363,7 @@ export function Workspace(_props?: WorkspaceProps) {
                         const data = await res.json();
                         if (data.success && !data.is_carousel) {
                           const captionText = typeof data.caption === 'string' ? data.caption : 'Видео из Instagram';
-                          await addVideoToInbox({
+                          const savedVideo = await addVideoToInbox({
                             title: captionText,
                             previewUrl: data.thumbnail_url || '',
                             url: data.url,
@@ -1367,8 +1376,20 @@ export function Workspace(_props?: WorkspaceProps) {
                             folderId: undefined,
                             takenAt: data.taken_at,
                           });
+                          if (!savedVideo) {
+                            return;
+                          }
                           setReelLinkUrl('');
-                          toast.success('Рилс добавлен в раздел');
+                          toast.success(
+                            savedVideo.saveAction === 'updated'
+                              ? 'Рилс уже был в разделе'
+                              : 'Рилс добавлен в раздел',
+                            {
+                              description: savedVideo.saveAction === 'updated'
+                                ? 'Обновили данные существующего видео'
+                                : undefined,
+                            }
+                          );
                         } else if (data.success && data.is_carousel) {
                           toast.error('Это карусель. Добавляй во вкладке «Карусели».');
                         } else {
@@ -2009,6 +2030,10 @@ export function Workspace(_props?: WorkspaceProps) {
         </div>,
         document.body
       )}
+      <DuplicateVideoModal
+        prompt={duplicateVideoPrompt}
+        onResolve={resolveDuplicateVideoPrompt}
+      />
       {/* Presence Indicator */}
       <PresenceIndicator presence={presence} getUsername={getUsername} />
     </div>
