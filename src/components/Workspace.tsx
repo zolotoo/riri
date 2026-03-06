@@ -17,7 +17,7 @@ import { VideoDetailPage } from './VideoDetailPage';
 import { CarouselDetailPage } from './CarouselDetailPage';
 import { useCarousels, type SavedCarousel } from '../hooks/useCarousels';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
-import { calculateViralMultiplier, applyViralMultiplierToCoefficient, getProfileStats, calculateCarouselViralMultiplier } from '../services/profileStatsService';
+import { calculateViralMultiplier, applyViralMultiplierToCoefficient, getProfileStats, getOrUpdateProfileStats, calculateCarouselViralMultiplier } from '../services/profileStatsService';
 import { dialogScale, dialogSlideUp, backdropFade, iosSpringSoft } from '../utils/motionPresets';
 import { TokenBadge } from './ui/TokenBadge';
 import { GlassFolderIcon } from './ui/GlassFolderIcons';
@@ -598,10 +598,15 @@ export function Workspace(_props?: WorkspaceProps) {
           usernames.add(v.owner_username.toLowerCase());
         }
       });
-      
+
       for (const username of usernames) {
         if (!profileStatsCache.has(username)) {
-          const stats = await getProfileStats(username);
+          let stats = await getProfileStats(username);
+          // Если в БД статистики ещё нет, догружаем её сразу — как в деталке.
+          if (!stats) {
+            stats = await getOrUpdateProfileStats(username, false);
+          }
+
           if (stats) {
             setProfileStatsCache(prev => new Map(prev).set(username, stats));
           }
@@ -1354,6 +1359,7 @@ export function Workspace(_props?: WorkspaceProps) {
                         const data = await res.json();
                         if (data.success && !data.is_carousel) {
                           const captionText = typeof data.caption === 'string' ? data.caption : 'Видео из Instagram';
+
                           await addVideoToInbox({
                             title: captionText,
                             previewUrl: data.thumbnail_url || '',
