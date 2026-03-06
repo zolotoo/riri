@@ -69,6 +69,8 @@ export interface UseInboxVideosOptions {
   sortBy?: InboxSortBy;
 }
 
+export type DuplicateVideoStrategy = 'update' | 'insert' | 'prompt';
+
 /**
  * Хук для работы с сохранёнными видео пользователя.
  * Загружает видео страницами, чтобы не лагать на проектах с большим количеством видео.
@@ -424,6 +426,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     projectId?: string;
     folderId?: string;
     takenAt?: string | number;
+    duplicateStrategy?: DuplicateVideoStrategy;
   }) => {
     const userId = getUserId();
     
@@ -433,6 +436,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     // Извлекаем shortcode из URL если его нет
     const shortcode = video.shortcode || extractShortcode(video.url) || undefined;
     const videoId = video.videoId || shortcode || `video-${Date.now()}`;
+    const requestedDuplicateStrategy = video.duplicateStrategy ?? 'update';
     
     console.log('[InboxVideos] Adding video:', { 
       userId, 
@@ -503,29 +507,13 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         .catch(() => {});
     }
 
-    // Создаём локальное видео сразу для быстрого UI
-    const localVideo: IncomingVideo & { 
+    let localVideo: (IncomingVideo & { 
       view_count?: number; 
       like_count?: number; 
       comment_count?: number;
       owner_username?: string;
       taken_at?: number;
-    } = {
-      id: `local-${Date.now()}`,
-      title: video.title,
-      previewUrl: thumbnailToSave,
-      url: video.url,
-      receivedAt: new Date(),
-      view_count: video.viewCount,
-      like_count: video.likeCount,
-      comment_count: video.commentCount,
-      owner_username: video.ownerUsername,
-      taken_at: takenAtTimestamp,
-    };
-
-    // Оптимистичное обновление UI
-    setVideos(prev => [localVideo, ...prev]);
-    setIncomingVideos([localVideo, ...useFlowStore.getState().incomingVideos]);
+    }) | null = null;
 
     try {
       // 1. СНАЧАЛА проверяем/создаём видео в ГЛОБАЛЬНОЙ таблице videos
@@ -557,31 +545,63 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
       // Важно: один shortcode может быть в разных проектах — у каждого своя запись (свой сценарий, ссылки)
       let existingUserVideo = null;
       if (shortcode) {
-        const targetProjectIdForCheck = video.projectId !== undefined ? video.projectId : currentProjectId || null;
         let query = supabase
           .from('saved_videos')
           .select('id, transcript_status, transcript_text')
           .eq('user_id', userId)
           .eq('shortcode', shortcode);
         // Фильтруем по project_id: совпадение null с null, иначе по значению
-        if (targetProjectIdForCheck) {
-          query = query.eq('project_id', targetProjectIdForCheck);
+        if (targetProjectId) {
+          query = query.eq('project_id', targetProjectId);
         } else {
           query = query.is('project_id', null);
         }
         const { data: existing } = await query.maybeSingle();
         existingUserVideo = existing;
       }
+
+      let duplicateStrategy = requestedDuplicateStrategy;
+      if (existingUserVideo && requestedDuplicateStrategy === 'prompt') {
+        const shouldUpdate = window.confirm(
+          'У нас уже есть такое видео в этом проекте.\n\nОК — обновить данные прошлого видео\nОтмена — добавить ещё одно видео'
+        );
+        duplicateStrategy = shouldUpdate ? 'update' : 'insert';
+        if (duplicateStrategy === 'update') {
+          toast.info('Обновляю данные существующего видео');
+        } else {
+          toast.info('Добавляю ещё одно видео');
+        }
+      }
+
+      const shouldUpdateExisting = Boolean(existingUserVideo && duplicateStrategy !== 'insert');
+      const insertVideoId = shouldUpdateExisting ? videoId : `${videoId}-${Date.now()}`;
+
+      if (!shouldUpdateExisting) {
+        // Создаём локальное видео сразу для быстрого UI, если это новое добавление
+        localVideo = {
+          id: `local-${Date.now()}`,
+          title: video.title,
+          previewUrl: thumbnailToSave,
+          url: video.url,
+          receivedAt: new Date(),
+          view_count: video.viewCount,
+          like_count: video.likeCount,
+          comment_count: video.commentCount,
+          owner_username: video.ownerUsername,
+          taken_at: takenAtTimestamp,
+        };
+
+        // Оптимистичное обновление UI
+        setVideos(prev => [localVideo!, ...prev]);
+        setIncomingVideos([localVideo, ...useFlowStore.getState().incomingVideos]);
+      }
       
       let data;
       let error;
 
-      if (existingUserVideo) {
+      if (shouldUpdateExisting && existingUserVideo) {
         // 3a. Обновляем существующее видео пользователя
         console.log('[InboxVideos] User video exists, updating:', existingUserVideo.id);
-        
-        // Используем currentProjectId из контекста, если projectId не передан явно
-        const targetProjectId = video.projectId !== undefined ? video.projectId : currentProjectId || null;
         
         // Если у пользователя нет транскрибации, но есть в глобальной - копируем
         const updateData: Record<string, unknown> = {
@@ -624,12 +644,9 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         // 3b. Создаём новое видео для пользователя
         console.log('[InboxVideos] Creating new user video');
         
-        // Используем currentProjectId из контекста, если projectId не передан явно
-        const targetProjectId = video.projectId !== undefined ? video.projectId : currentProjectId || null;
-        
         const insertData: Record<string, unknown> = {
           user_id: userId,
-          video_id: videoId,
+          video_id: insertVideoId,
           shortcode: shortcode,
           thumbnail_url: thumbnailToSave,
           video_url: video.url,
@@ -661,14 +678,29 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
 
       if (error) {
         console.error('[InboxVideos] Error saving video:', error);
-        return localVideo;
+        return localVideo || {
+          id: existingUserVideo?.id || `fallback-${Date.now()}`,
+          title: video.title,
+          previewUrl: thumbnailToSave,
+          url: video.url,
+          receivedAt: new Date(),
+        };
       }
 
       if (data) {
         const savedVideo = transformVideo(data);
-        // Заменяем локальное видео на сохранённое
-        setVideos(prev => [savedVideo, ...prev.filter(v => v.id !== localVideo.id)]);
-        setIncomingVideos([savedVideo, ...useFlowStore.getState().incomingVideos.filter(v => v.id !== localVideo.id)]);
+        // Заменяем локальное видео на сохранённое и убираем дубликаты по id
+        setVideos(prev => [
+          savedVideo,
+          ...prev.filter(v => v.id !== savedVideo.id && (!localVideo || v.id !== localVideo.id)),
+        ]);
+        setIncomingVideos([
+          savedVideo,
+          ...useFlowStore
+            .getState()
+            .incomingVideos
+            .filter(v => v.id !== savedVideo.id && (!localVideo || v.id !== localVideo.id)),
+        ]);
         
         // 4. Транскрибация только по кнопке — не запускаем автоматически
         if (existingTranscription?.hasTranscription) {
@@ -688,10 +720,22 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         return savedVideo;
       }
 
-      return localVideo;
+      return localVideo || {
+        id: existingUserVideo?.id || `fallback-${Date.now()}`,
+        title: video.title,
+        previewUrl: thumbnailToSave,
+        url: video.url,
+        receivedAt: new Date(),
+      };
     } catch (err) {
       console.error('Error saving video:', err);
-      return localVideo;
+      return localVideo || {
+        id: `fallback-${Date.now()}`,
+        title: video.title,
+        previewUrl: thumbnailToSave,
+        url: video.url,
+        receivedAt: new Date(),
+      };
     }
   }, [setIncomingVideos, transformVideo, getUserId, fetchFolderCounts, fetchVideos]);
 

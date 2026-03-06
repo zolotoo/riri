@@ -1366,6 +1366,7 @@ export function Workspace(_props?: WorkspaceProps) {
                             projectId: currentProjectId || undefined,
                             folderId: undefined,
                             takenAt: data.taken_at,
+                            duplicateStrategy: 'prompt',
                           });
                           setReelLinkUrl('');
                           toast.success('Рилс добавлен в раздел');

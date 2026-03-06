@@ -112,6 +112,7 @@ export function History() {
         likeCount: reel.like_count,
         commentCount: reel.comment_count,
         ownerUsername: reel.owner?.username,
+        duplicateStrategy: 'prompt',
       });
       toast.success('Видео добавлено', {
         description: `@${reel.owner?.username || 'instagram'}`,

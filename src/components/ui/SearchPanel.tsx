@@ -614,6 +614,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
         projectId: currentProjectId || undefined,
         folderId: folderId === 'all' ? undefined : folderId,
         takenAt: result.taken_at,
+        duplicateStrategy: 'prompt',
       });
       toast.success(`Добавлено в "${folderName}"`, {
         description: `Проект: ${currentProjectName} • @${result.owner?.username || 'instagram'}`,
@@ -763,6 +764,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
             projectId: currentProjectId,
             folderId: undefined,
             takenAt: data.taken_at,
+            duplicateStrategy: 'prompt',
           });
           if (mountedRef.current) {
             await deduct(cost);
@@ -874,6 +876,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
         projectId: activeProjectId,
         folderId: folderId === 'all' ? undefined : folderId, // 'all' = Все видео = без папки
         takenAt: result.taken_at,
+        duplicateStrategy: 'prompt',
       });
       
       setShowFolderSelect(false);
