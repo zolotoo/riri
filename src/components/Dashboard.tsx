@@ -27,7 +27,9 @@ export function setDisplayName(name: string): void {
   try {
     localStorage.setItem(DISPLAY_NAME_KEY, name.trim());
     localStorage.setItem(ONBOARDING_DONE_KEY, '1');
-  } catch {}
+  } catch {
+    // Ignore storage write errors in restricted environments.
+  }
 }
 
 export function isOnboardingDone(): boolean {
@@ -62,7 +64,7 @@ const GRADIENT_CARDS = [
     accent: 'по ссылке',
     subtitle: 'Вставь ссылку на Instagram — получи данные и сохрани',
     icon: Link,
-    gradient: 'from-blue-400 via-blue-500 to-blue-600',
+    gradient: 'from-[#8bc3ff] via-[#6cafff] to-[#5b99f6]',
     cta: 'Открыть →',
     onAction: (fn: (t: 'link') => void) => fn('link'),
   },
@@ -72,7 +74,7 @@ const GRADIENT_CARDS = [
     accent: 'радар',
     subtitle: 'Отслеживай новые видео с профилей',
     icon: Radar,
-    gradient: 'from-emerald-400 via-emerald-500 to-emerald-600',
+    gradient: 'from-[#8be7cf] via-[#67d8b9] to-[#4bc7a5]',
     cta: 'Открыть →',
     onAction: (fn: (t: 'radar') => void) => fn('radar'),
   },
@@ -135,21 +137,21 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
                   transition={{ duration: 0.35, delay: i * 0.05 }}
                   className={cn(
                     'relative rounded-2xl md:rounded-3xl overflow-hidden',
-                    'bg-gradient-to-br text-white',
+                    'bg-gradient-to-br text-white border border-white/35',
                     card.gradient
                   )}
                   style={{
                     boxShadow:
-                      '0 4px 6px -1px rgba(0,0,0,0.08), 0 10px 20px -5px rgba(0,0,0,0.1), 0 20px 40px -10px rgba(0,0,0,0.08)',
+                      '0 2px 10px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(45, 92, 145, 0.14)',
                   }}
                 >
                   {/* Subtle 3D-style decorative shape — размыты чтобы не выделялись */}
                   <div
-                    className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/10 blur-3xl"
+                    className="absolute -right-8 -bottom-8 w-32 h-32 rounded-full bg-white/12 blur-3xl"
                     aria-hidden
                   />
                   <div
-                    className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/5 blur-3xl"
+                    className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/7 blur-3xl"
                     aria-hidden
                   />
                   <div className="relative p-4 md:p-6 flex flex-col min-h-[120px] md:min-h-[160px]">
@@ -165,7 +167,7 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
                     <button
                       type="button"
                       onClick={() => card.onAction(onOpenSearch)}
-                      className="self-start px-4 py-2.5 min-h-[44px] rounded-xl bg-white/25 hover:bg-white/30 active:bg-white/35 text-white font-semibold text-sm transition-colors touch-manipulation"
+                      className="self-start px-4 py-2.5 min-h-[44px] rounded-xl bg-white/30 hover:bg-white/38 active:bg-white/45 border border-white/35 text-white font-semibold text-sm transition-colors touch-manipulation"
                     >
                       {card.cta}
                     </button>

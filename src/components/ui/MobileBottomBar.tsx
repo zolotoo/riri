@@ -48,13 +48,13 @@ export const MobileBottomBar = React.forwardRef<HTMLElement, MobileBottomBarProp
         <div
           className="pointer-events-auto"
           style={{
-            background: "rgba(248, 248, 252, 0.84)",
-            backdropFilter: "blur(44px) saturate(200%)",
-            WebkitBackdropFilter: "blur(44px) saturate(200%)",
+            background: "rgba(248, 250, 255, 0.78)",
+            backdropFilter: "blur(28px) saturate(170%)",
+            WebkitBackdropFilter: "blur(28px) saturate(170%)",
             borderRadius: 34,
-            border: "1px solid rgba(255,255,255,0.72)",
+            border: "1px solid rgba(255,255,255,0.66)",
             boxShadow:
-              "0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.9)",
+              "0 10px 30px rgba(11, 34, 64, 0.14), 0 2px 8px rgba(11, 34, 64, 0.08), inset 0 1px 0 rgba(255,255,255,0.86)",
             padding: "6px 4px",
           }}
         >
@@ -96,29 +96,60 @@ export const MobileBottomBar = React.forwardRef<HTMLElement, MobileBottomBarProp
                     whileTap={{ scale: 0.87 }}
                     transition={spring}
                   >
-                    <Icon
-                      style={{
-                        width: 24,
-                        height: 24,
-                        color: isActive ? "#18181b" : "#a8a8b0",
-                        strokeWidth: isActive ? 2.1 : 1.65,
-                        transition: "color 0.18s ease",
-                        flexShrink: 0,
-                      }}
-                    />
-
                     <span
                       style={{
-                        fontSize: 10.5,
-                        fontWeight: isActive ? 600 : 400,
-                        letterSpacing: "-0.01em",
-                        color: isActive ? "#18181b" : "#a8a8b0",
-                        lineHeight: 1,
-                        transition: "color 0.18s ease, font-weight 0.18s ease",
-                        whiteSpace: "nowrap",
+                        position: "relative",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 3,
+                        borderRadius: 18,
+                        padding: "4px 10px",
                       }}
                     >
-                      {item.label}
+                      {isActive && (
+                        <motion.span
+                          layoutId="mobile-tab-active-pill"
+                          transition={spring}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            borderRadius: 18,
+                            background: "rgba(10, 132, 255, 0.14)",
+                            border: "1px solid rgba(10, 132, 255, 0.25)",
+                            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.55)",
+                          }}
+                        />
+                      )}
+                      <Icon
+                        style={{
+                          width: 24,
+                          height: 24,
+                          color: isActive ? "#0a84ff" : "#8f94a3",
+                          strokeWidth: isActive ? 2.1 : 1.75,
+                          transition: "color 0.18s ease",
+                          flexShrink: 0,
+                          position: "relative",
+                          zIndex: 1,
+                        }}
+                      />
+
+                      <span
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: isActive ? 600 : 500,
+                          letterSpacing: "-0.01em",
+                          color: isActive ? "#0a84ff" : "#8f94a3",
+                          lineHeight: 1,
+                          transition: "color 0.18s ease, font-weight 0.18s ease",
+                          whiteSpace: "nowrap",
+                          position: "relative",
+                          zIndex: 1,
+                        }}
+                      >
+                        {item.label}
+                      </span>
                     </span>
                   </motion.button>
                 </li>
