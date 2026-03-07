@@ -2,8 +2,6 @@
 
 import { motion } from 'framer-motion';
 import { Link, Radar, LayoutGrid, FileText, Users, ArrowRight } from 'lucide-react';
-import { cn } from '../utils/cn';
-
 const DISPLAY_NAME_KEY = 'riri-display-name';
 const ONBOARDING_DONE_KEY = 'riri-onboarding-done';
 
