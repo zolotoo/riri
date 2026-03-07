@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, ExternalLink, Plus, Eye, Heart, MessageCircle, ChevronLeft, ChevronRight, Sparkles, Play, Link, Loader2, Radar, UserPlus, Check, Calendar } from 'lucide-react';
+import { AnimatedSendIcon } from './animated-state-icons';
 import { TextShimmer } from './TextShimmer';
 import { VideoGradientCard } from './VideoGradientCard';
 import { GlassTabButton, GlassTabGroup } from './GlassTabButton';
@@ -169,6 +170,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
   const [activeTab, setActiveTab] = useState<SearchTab>(effectiveInitialTab);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
   const [linkPreview, setLinkPreview] = useState<(InstagramSearchResult & { is_carousel?: boolean; carousel_slides?: string[] }) | null>(null);
   const [showFolderSelect, setShowFolderSelect] = useState(false);
   const [cardFolderSelect, setCardFolderSelect] = useState<string | null>(null);
@@ -667,6 +669,8 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
   // Операция продолжается в фоне даже если панель закрыли — данные сохранятся в БД
   const handleParseLink = async () => {
     if (!linkUrl.trim()) return;
+    setLinkSent(true);
+    setTimeout(() => setLinkSent(false), 600);
     
     if (!currentProjectId) {
       toast.error('Сначала выберите проект в боковом меню');
@@ -1168,7 +1172,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
                       {linkLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <Search className="w-4 h-4" />
+                        <AnimatedSendIcon size={16} active={linkSent} color="currentColor" />
                       )}
                       Найти
                     </button>
