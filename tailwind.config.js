@@ -30,6 +30,10 @@ export default {
         'dense': '1.25',
       },
       colors: {
+        'chart-label': 'var(--chart-label)',
+        'chart-tooltip-foreground': 'var(--chart-tooltip-foreground)',
+        'chart-tooltip-muted': 'var(--chart-tooltip-muted)',
+        'chart-tooltip-background': 'var(--chart-tooltip-background)',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: 'hsl(var(--card))',

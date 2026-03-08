@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Area Chart CSS Variables ───────────────────────────────────────────── */
+:root {
+  --chart-background: rgba(255, 255, 255, 0.9);
+  --chart-foreground: #1e293b;
+  --chart-foreground-muted: #64748b;
+  --chart-line-primary: #6366f1;
+  --chart-line-secondary: #94a3b8;
+  --chart-crosshair: #6366f1;
+  --chart-grid: rgba(148, 163, 184, 0.3);
+  --chart-tooltip-background: rgba(255, 255, 255, 0.88);
+  --chart-tooltip-foreground: #1e293b;
+  --chart-tooltip-muted: #64748b;
+  --chart-marker-background: #f8fafc;
+  --chart-marker-border: #e2e8f0;
+  --chart-marker-foreground: #334155;
+  --chart-ring-background: rgba(99, 102, 241, 0.15);
+  --chart-label: #94a3b8;
+}
+
 @layer base {
   :root {
     /* Светлая тема с насыщенным оранжевым акцентом */

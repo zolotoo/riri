@@ -7,6 +7,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { History } from './components/History';
 import { AIScriptwriter } from './components/AIScriptwriter';
 import { ProfilePage } from './components/ProfilePage';
+import { Analytics } from './components/Analytics';
 import { IncomingVideosDrawer } from './components/sidebar/IncomingVideosDrawer';
 import { SearchPanel, HIDE_SEARCH_BY_WORD } from './components/ui/SearchPanel';
 import { ProjectMembersModal } from './components/ui/ProjectMembersModal';
@@ -24,7 +25,7 @@ import { ProjectProvider, useProjectContext } from './contexts/ProjectContext';
 import type { Project } from './hooks/useProjects';
 import { 
   Settings, Search, LayoutGrid, Clock, User, LogOut, 
-  Link, Radar, Plus, X, Palette, Sparkles, Trash2, Users, Menu, Home
+  Link, Radar, Plus, X, Palette, Sparkles, Trash2, Users, Menu, Home, BarChart2
 } from 'lucide-react';
 import { GlassFolderIcon } from './components/ui/GlassFolderIcons';
 import { MobileBottomBar, type MobileTabId } from './components/ui/MobileBottomBar';
@@ -32,7 +33,7 @@ import { cn } from './utils/cn';
 import { Toaster, toast } from 'sonner';
 
 
-type ViewMode = 'dashboard' | 'workspace' | 'canvas' | 'history' | 'profile' | 'scriptwriter';
+type ViewMode = 'dashboard' | 'workspace' | 'canvas' | 'history' | 'profile' | 'scriptwriter' | 'analytics';
 type SearchTab = 'search' | 'link' | 'radar';
 
 // Цвета для проектов
@@ -377,7 +378,7 @@ function AppContent() {
     if (typeof window === 'undefined') return 'dashboard';
     try {
       const v = localStorage.getItem('app_view_mode');
-      if (v === 'dashboard' || v === 'workspace' || v === 'canvas' || v === 'history' || v === 'profile' || v === 'scriptwriter') return v;
+      if (v === 'dashboard' || v === 'workspace' || v === 'canvas' || v === 'history' || v === 'profile' || v === 'scriptwriter' || v === 'analytics') return v;
     } catch { /* ignore */ }
     return 'dashboard';
   });
@@ -656,6 +657,12 @@ function AppContent() {
                   />
                 )}
                 <SidebarLink
+                  icon={<BarChart2 className="w-4 h-4" strokeWidth={2.5} />}
+                  label="Аналитика"
+                  onClick={() => setViewMode('analytics')}
+                  isActive={viewMode === 'analytics'}
+                />
+                <SidebarLink
                   icon={<Sparkles className="w-4 h-4" strokeWidth={2.5} />}
                   label="ИИ-сценарист"
                   onClick={() => setViewMode('scriptwriter')}
@@ -800,6 +807,7 @@ function AppContent() {
             )}
             {viewMode === 'workspace' && <Workspace />}
             {viewMode === 'scriptwriter' && <AIScriptwriter />}
+            {viewMode === 'analytics' && <Analytics />}
             {viewMode === 'history' && <History />}
             {viewMode === 'profile' && <ProfilePage />}
           </motion.div>

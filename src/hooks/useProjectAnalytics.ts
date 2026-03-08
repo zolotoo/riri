@@ -1,0 +1,348 @@
+import { useState, useCallback, useMemo } from 'react';
+import { supabase } from '../utils/supabase';
+import { setUserContext } from '../utils/supabase';
+import { useAuth } from './useAuth';
+import { toast } from 'sonner';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface ProjectReel {
+  id: string;
+  project_id: string;
+  shortcode: string;
+  instagram_id: string | null;
+  thumbnail_url: string | null;
+  video_url: string | null;
+  caption: string | null;
+  taken_at: number | null;
+  created_at: string;
+  updated_at: string;
+  // Joined latest snapshot
+  latest_view_count?: number;
+  latest_like_count?: number;
+  latest_comment_count?: number;
+  latest_snapshotted_at?: string;
+}
+
+export interface MetricsSnapshot {
+  id: string;
+  reel_id: string;
+  project_id: string;
+  view_count: number;
+  like_count: number;
+  comment_count: number;
+  snapshotted_at: string;
+}
+
+export interface ReelWithHistory extends ProjectReel {
+  snapshots: MetricsSnapshot[];
+}
+
+export type SyncCount = 12 | 24 | 36;
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useProjectAnalytics(projectId: string | null) {
+  const { user } = useAuth();
+  const [reels, setReels] = useState<ProjectReel[]>([]);
+  const [snapshots, setSnapshots] = useState<MetricsSnapshot[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [instagramUsername, setInstagramUsernameState] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+
+  // ── Load reels + snapshots from DB ──────────────────────────────────────────
+  const loadAnalytics = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    try {
+      const userId = user?.id;
+      if (userId) await setUserContext(userId);
+
+      // Load reels
+      const { data: reelsData, error: reelsError } = await supabase
+        .from('project_reels')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('taken_at', { ascending: false });
+
+      if (reelsError) throw reelsError;
+
+      if (!reelsData || reelsData.length === 0) {
+        setReels([]);
+        setSnapshots([]);
+        setLoading(false);
+        return;
+      }
+
+      // Load ALL snapshots for this project
+      const { data: snapshotsData, error: snapshotsError } = await supabase
+        .from('reel_metrics_snapshots')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('snapshotted_at', { ascending: true });
+
+      if (snapshotsError) throw snapshotsError;
+
+      // Attach latest snapshot info to each reel
+      const snapshotsByReelId = new Map<string, MetricsSnapshot[]>();
+      for (const snap of snapshotsData || []) {
+        if (!snapshotsByReelId.has(snap.reel_id)) snapshotsByReelId.set(snap.reel_id, []);
+        snapshotsByReelId.get(snap.reel_id)!.push(snap);
+      }
+
+      const reelsWithLatest: ProjectReel[] = reelsData.map(reel => {
+        const reelSnaps = snapshotsByReelId.get(reel.id) || [];
+        const latest = reelSnaps[reelSnaps.length - 1];
+        return {
+          ...reel,
+          latest_view_count: latest?.view_count,
+          latest_like_count: latest?.like_count,
+          latest_comment_count: latest?.comment_count,
+          latest_snapshotted_at: latest?.snapshotted_at,
+        };
+      });
+
+      setReels(reelsWithLatest);
+      setSnapshots(snapshotsData || []);
+
+      // Load last sync time
+      const snapTimes = snapshotsData?.map(s => s.snapshotted_at) || [];
+      if (snapTimes.length > 0) setLastSyncAt(snapTimes[snapTimes.length - 1]);
+    } catch (err) {
+      console.error('Error loading analytics:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, user?.id]);
+
+  // ── Load project instagram username ─────────────────────────────────────────
+  const loadProjectConfig = useCallback(async () => {
+    if (!projectId) return;
+    const { data } = await supabase
+      .from('projects')
+      .select('analytics_instagram_username')
+      .eq('id', projectId)
+      .single();
+    if (data?.analytics_instagram_username) {
+      setInstagramUsernameState(data.analytics_instagram_username);
+    }
+  }, [projectId]);
+
+  // ── Save instagram username to project ──────────────────────────────────────
+  const setInstagramUsername = useCallback(async (username: string) => {
+    if (!projectId) return;
+    const clean = username.replace(/^@/, '').trim().toLowerCase();
+    const { error } = await supabase
+      .from('projects')
+      .update({ analytics_instagram_username: clean })
+      .eq('id', projectId);
+    if (!error) setInstagramUsernameState(clean);
+    return !error;
+  }, [projectId]);
+
+  // ── Sync reels from Instagram API ───────────────────────────────────────────
+  const syncReels = useCallback(async (username: string, count: SyncCount = 12) => {
+    if (!projectId) return;
+    setSyncing(true);
+    try {
+      // Fetch from Instagram via our API
+      const res = await fetch('/api/analytics-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, count }),
+      });
+      const data = await res.json();
+
+      if (!data.success || !data.reels?.length) {
+        toast.error('Не удалось получить рилсы. Проверьте username и попробуйте снова.');
+        return;
+      }
+
+      const userId = user?.id;
+      if (userId) await setUserContext(userId);
+
+      const snapshotTime = new Date().toISOString();
+
+      // Upsert reels + create snapshots
+      for (const reel of data.reels) {
+        // Upsert reel
+        const { data: upsertedReel, error: reelError } = await supabase
+          .from('project_reels')
+          .upsert({
+            project_id: projectId,
+            shortcode: reel.shortcode,
+            instagram_id: reel.id,
+            thumbnail_url: reel.thumbnail_url,
+            video_url: reel.url,
+            caption: reel.caption,
+            taken_at: reel.taken_at ? Number(reel.taken_at) : null,
+            updated_at: snapshotTime,
+          }, { onConflict: 'project_id,shortcode' })
+          .select('id')
+          .single();
+
+        if (reelError || !upsertedReel) {
+          console.error('Error upserting reel:', reelError);
+          continue;
+        }
+
+        // Insert snapshot
+        await supabase.from('reel_metrics_snapshots').insert({
+          reel_id: upsertedReel.id,
+          project_id: projectId,
+          view_count: reel.view_count || 0,
+          like_count: reel.like_count || 0,
+          comment_count: reel.comment_count || 0,
+          snapshotted_at: snapshotTime,
+        });
+      }
+
+      toast.success(`Синхронизировано ${data.reels.length} роликов`);
+      setLastSyncAt(snapshotTime);
+
+      // Reload data
+      await loadAnalytics();
+    } catch (err) {
+      console.error('Sync error:', err);
+      toast.error('Ошибка синхронизации');
+    } finally {
+      setSyncing(false);
+    }
+  }, [projectId, user?.id, loadAnalytics]);
+
+  // ── Get snapshots for a specific reel ───────────────────────────────────────
+  const getReelSnapshots = useCallback((reelId: string): MetricsSnapshot[] => {
+    return snapshots.filter(s => s.reel_id === reelId).sort((a, b) =>
+      new Date(a.snapshotted_at).getTime() - new Date(b.snapshotted_at).getTime()
+    );
+  }, [snapshots]);
+
+  // ── Compute summary stats ────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    if (reels.length === 0) return null;
+
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+    // Reels published in last 30 days
+    const reelLast30 = reels.filter(r => r.taken_at && r.taken_at * 1000 > thirtyDaysAgo);
+    const avgViews30 = reelLast30.length > 0
+      ? Math.round(reelLast30.reduce((sum, r) => sum + (r.latest_view_count || 0), 0) / reelLast30.length)
+      : 0;
+
+    // Best reel of the week (most views, published in last 7 days)
+    const reelLast7 = reels.filter(r => r.taken_at && r.taken_at * 1000 > sevenDaysAgo);
+    const bestReelWeek = reelLast7.reduce<ProjectReel | null>((best, r) => {
+      if (!best) return r;
+      return (r.latest_view_count || 0) > (best.latest_view_count || 0) ? r : best;
+    }, null);
+
+    // Best reel of the month
+    const bestReelMonth = reelLast30.reduce<ProjectReel | null>((best, r) => {
+      if (!best) return r;
+      return (r.latest_view_count || 0) > (best.latest_view_count || 0) ? r : best;
+    }, null);
+
+    const totalViews = reels.reduce((sum, r) => sum + (r.latest_view_count || 0), 0);
+
+    return {
+      totalReels: reels.length,
+      reelsLast30Days: reelLast30.length,
+      avgViewsLast30Days: avgViews30,
+      bestReelWeek,
+      bestReelMonth,
+      totalViews,
+    };
+  }, [reels]);
+
+  // ── Build time-series data for charts ───────────────────────────────────────
+  const buildChartData = useCallback((
+    period: 'day' | 'week' | 'month',
+    mode: 'cumulative' | 'release_week'
+  ) => {
+    if (snapshots.length === 0) return [];
+
+    // Group snapshots by date bucket
+    const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
+
+    const getBucketKey = (date: Date) => {
+      if (period === 'day') {
+        return date.toISOString().slice(0, 10);
+      } else if (period === 'week') {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        d.setDate(diff);
+        return d.toISOString().slice(0, 10);
+      } else {
+        return date.toISOString().slice(0, 7);
+      }
+    };
+
+    // Build a map of reel publication dates
+    const reelPubMap = new Map<string, number>();
+    for (const reel of reels) {
+      if (reel.taken_at) reelPubMap.set(reel.id, reel.taken_at * 1000);
+    }
+
+    for (const snap of snapshots) {
+      const snapDate = new Date(snap.snapshotted_at);
+      const reelPubMs = reelPubMap.get(snap.reel_id);
+
+      if (mode === 'release_week' && reelPubMs) {
+        // Only count if the reel was published in the same bucket
+        const reelPubDate = new Date(reelPubMs);
+        const snapBucket = getBucketKey(snapDate);
+        const reelBucket = getBucketKey(reelPubDate);
+        if (snapBucket !== reelBucket) continue;
+      }
+
+      const key = getBucketKey(snapDate);
+      const existing = bucketMap.get(key);
+
+      if (!existing) {
+        bucketMap.set(key, {
+          views: snap.view_count,
+          likes: snap.like_count,
+          comments: snap.comment_count,
+          date: snapDate,
+        });
+      } else {
+        bucketMap.set(key, {
+          views: existing.views + snap.view_count,
+          likes: existing.likes + snap.like_count,
+          comments: existing.comments + snap.comment_count,
+          date: existing.date,
+        });
+      }
+    }
+
+    return Array.from(bucketMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => ({
+        date: new Date(v.date.toISOString().slice(0, 10)),
+        views: v.views,
+        likes: v.likes,
+        comments: v.comments,
+      }));
+  }, [snapshots, reels]);
+
+  return {
+    reels,
+    snapshots,
+    loading,
+    syncing,
+    stats,
+    instagramUsername,
+    lastSyncAt,
+    loadAnalytics,
+    loadProjectConfig,
+    setInstagramUsername,
+    syncReels,
+    getReelSnapshots,
+    buildChartData,
+  };
+}
