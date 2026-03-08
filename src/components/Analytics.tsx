@@ -72,6 +72,98 @@ function GreySphere({ size = 56 }: { size?: number }) {
   );
 }
 
+// ─── 3D Trophy Mascot ─────────────────────────────────────────────────────────
+
+function TrophyMascot() {
+  return (
+    <motion.div
+      animate={{ y: [0, -10, 0] }}
+      transition={{ repeat: Infinity, duration: 3.5, ease: 'easeInOut' }}
+      className="relative flex items-center justify-center"
+    >
+      {/* Ambient glow */}
+      <div className="absolute w-24 h-16 rounded-full blur-2xl opacity-60" style={{ background: 'radial-gradient(ellipse, #fcd34d 0%, #f59e0b 60%, transparent 100%)', bottom: -8 }} />
+      <svg width="88" height="104" viewBox="0 0 88 104" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="tg1" x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0%" stopColor="#FEF3C7" />
+            <stop offset="35%" stopColor="#FCD34D" />
+            <stop offset="75%" stopColor="#F59E0B" />
+            <stop offset="100%" stopColor="#D97706" />
+          </linearGradient>
+          <linearGradient id="tg2" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FDE68A" />
+            <stop offset="100%" stopColor="#F59E0B" />
+          </linearGradient>
+          <linearGradient id="tg3" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FCD34D" />
+            <stop offset="100%" stopColor="#B45309" />
+          </linearGradient>
+          <linearGradient id="tg4" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#D97706" />
+            <stop offset="40%" stopColor="#FCD34D" />
+            <stop offset="100%" stopColor="#D97706" />
+          </linearGradient>
+          <filter id="ts" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#D97706" floodOpacity="0.5" />
+          </filter>
+        </defs>
+
+        {/* Shadow under base */}
+        <ellipse cx="44" cy="100" rx="22" ry="5" fill="#B45309" opacity="0.25" />
+
+        {/* Base plate */}
+        <rect x="24" y="88" width="40" height="10" rx="5" fill="url(#tg4)" filter="url(#ts)" />
+        <rect x="26" y="89" width="36" height="4" rx="2" fill="#FDE68A" opacity="0.4" />
+
+        {/* Stem */}
+        <rect x="37" y="72" width="14" height="18" rx="3" fill="url(#tg3)" />
+        <rect x="39" y="73" width="6" height="16" rx="2" fill="#FCD34D" opacity="0.35" />
+
+        {/* Cup body */}
+        <path d="M14 16 Q14 8 22 8 L66 8 Q74 8 74 16 L68 70 Q68 74 64 74 L24 74 Q20 74 20 70 Z" fill="url(#tg1)" filter="url(#ts)" />
+
+        {/* Inner cup highlight */}
+        <path d="M20 18 Q20 13 26 13 L62 13 Q68 13 68 18 L63 66 Q63 69 60 69 L28 69 Q25 69 25 66 Z" fill="url(#tg2)" opacity="0.5" />
+
+        {/* Left handle */}
+        <path d="M18 22 Q4 32 4 48 Q4 60 18 62" stroke="url(#tg1)" strokeWidth="7" fill="none" strokeLinecap="round" filter="url(#ts)" />
+        <path d="M18 22 Q6 34 6 48 Q6 58 18 62" stroke="#FDE68A" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6" />
+
+        {/* Right handle */}
+        <path d="M70 22 Q84 32 84 48 Q84 60 70 62" stroke="url(#tg1)" strokeWidth="7" fill="none" strokeLinecap="round" filter="url(#ts)" />
+        <path d="M70 22 Q82 34 82 48 Q82 58 70 62" stroke="#FDE68A" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6" />
+
+        {/* Star on cup */}
+        <text x="44" y="52" textAnchor="middle" fontSize="24" fill="white" opacity="0.95" filter="url(#ts)">★</text>
+
+        {/* Shine top-left */}
+        <ellipse cx="30" cy="26" rx="7" ry="10" fill="white" opacity="0.22" transform="rotate(-25 30 26)" />
+        <ellipse cx="28" cy="23" rx="3" ry="5" fill="white" opacity="0.35" transform="rotate(-25 28 23)" />
+
+        {/* Rim highlight */}
+        <path d="M22 8 Q44 5 66 8" stroke="white" strokeWidth="2.5" fill="none" opacity="0.5" strokeLinecap="round" />
+      </svg>
+
+      {/* Sparkles */}
+      {[
+        { x: 6, y: 4, size: 12, delay: 0 },
+        { x: 74, y: 10, size: 9, delay: 0.8 },
+        { x: 2, y: 52, size: 7, delay: 1.4 },
+        { x: 80, y: 58, size: 8, delay: 0.4 },
+      ].map((s, i) => (
+        <motion.div
+          key={i}
+          className="absolute text-yellow-300"
+          style={{ left: s.x, top: s.y, fontSize: s.size }}
+          animate={{ opacity: [0, 1, 0], scale: [0.5, 1, 0.5] }}
+          transition={{ repeat: Infinity, duration: 2.5, delay: s.delay, ease: 'easeInOut' }}
+        >✦</motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
 // ─── Bento Cards ──────────────────────────────────────────────────────────────
 
 const CARD = "bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-3xl shadow-[0_2px_20px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)]";
@@ -935,9 +1027,15 @@ export function Analytics() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // ── OVERVIEW — Bento Dashboard ────────────────────────────────────────────
+  // ── OVERVIEW — Bento Dashboard ────────────────────────────────────════════
   // ══════════════════════════════════════════════════════════════════════════
   const previewReels = sortedReels.slice(0, 4);
+
+  // Сумма просмотров за последние 30 дней (ролики опубликованные в этом периоде)
+  const monthAgo = Date.now() / 1000 - 30 * 86400;
+  const totalViewsMonth = reels
+    .filter(r => (r.taken_at ?? 0) >= monthAgo)
+    .reduce((s, r) => s + (r.latest_view_count ?? 0), 0);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-[#f0f0f5]">
@@ -949,101 +1047,149 @@ export function Analytics() {
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}
         >
           {/*
-           * Асимметричный бенто-грид:
-           *
-           *  [ Hero reel (лучший месяца) ]  [ Роликов        ]
-           *  [ — tall, spans 3 rows     ]  [ Ср. просм/ролик ]
-           *                                 [ Лучший недели   ]
-           *
-           * cols: 3fr  2fr
+           * ┌──────────────┬──────────────────┬──────────┐
+           * │              │  Просмотры (wide)│ Роликов  │
+           * │  HERO        │  мини-чарт       │ (narrow) │
+           * │  Кубок+месяц ├──────────────────┴──────────┤
+           * │              │  Лучший рилс недели (wide)  │
+           * └──────────────┴─────────────────────────────┘
+           * cols: 5fr  7fr  4fr
            */}
           <div
             className="grid gap-3"
-            style={{ gridTemplateColumns: '3fr 2fr', gridTemplateRows: 'auto auto auto' }}
+            style={{ gridTemplateColumns: '5fr 7fr 4fr', gridTemplateRows: 'auto auto' }}
           >
-            {/* LEFT: Hero — лучший рилс месяца, занимает 3 строки */}
-            {stats?.bestReelMonth ? (
-              <div style={{ gridRow: '1 / 4' }}>
-                <HeroReelCell
-                  icon={<TrendingUp className="w-3 h-3" />}
-                  label="Лучший месяца"
-                  reel={stats.bestReelMonth}
-                  accent="#10b981"
-                  onClick={() => setSelectedReel(stats.bestReelMonth!)}
-                />
-              </div>
-            ) : (
-              <div style={{ gridRow: '1 / 4' }} className={cn(CARD, "flex items-center justify-center min-h-[260px]")}>
-                <TrendingUp className="w-8 h-8 text-slate-200" />
-              </div>
-            )}
+            {/* ── LEFT HERO: кубок + сумма просмотров за месяц ─────────────── */}
+            <div
+              style={{ gridRow: '1 / 3' }}
+              className={cn(CARD, "relative overflow-hidden flex flex-col items-center justify-between p-4 min-h-[280px]")}
+              // Dark-gold gradient background
+              css-ignore="true"
+            >
+              {/* Dark gradient bg */}
+              <div className="absolute inset-0 rounded-3xl" style={{
+                background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)',
+              }} />
+              {/* Subtle gold shimmer overlay */}
+              <div className="absolute inset-0 rounded-3xl opacity-20" style={{
+                background: 'radial-gradient(ellipse at 50% 30%, #fbbf24 0%, transparent 70%)',
+              }} />
 
-            {/* RIGHT col: 3 карточки разной высоты */}
-            {/* R1: Роликов в базе */}
-            <StatCell
-              icon={<Film className="w-3.5 h-3.5" />}
-              label="Роликов"
-              value={stats?.totalReels || 0}
-              sub="в базе"
-              accent="#64748b"
-            />
-            {/* R2: Ср. просм./ролик */}
-            <StatCell
-              icon={<Eye className="w-3.5 h-3.5" />}
-              label="Ср. просм./ролик"
-              value={stats?.avgViewsLast30Days || 0}
-              sub="за 30 дней"
-              accent="#6366f1"
-            />
-            {/* R3: Лучший рилс недели — компактная карточка */}
-            {stats?.bestReelWeek ? (
-              <CompactReelCell
-                icon={<Award className="w-3 h-3" />}
-                label="Лучший недели"
-                reel={stats.bestReelWeek}
-                accent="#f59e0b"
-                onClick={() => setSelectedReel(stats.bestReelWeek!)}
-              />
-            ) : (
-              <div className={cn(CARD, "flex items-center justify-center p-3")}>
-                <Award className="w-5 h-5 text-slate-200" />
+              {/* Content */}
+              <div className="relative w-full flex flex-col items-center gap-1 flex-1 justify-between">
+                {/* Label */}
+                <p className="text-[10px] font-bold uppercase tracking-widest text-yellow-400/80 self-start">
+                  Просмотры за месяц
+                </p>
+
+                {/* Trophy */}
+                <div className="flex-1 flex items-center justify-center">
+                  <TrophyMascot />
+                </div>
+
+                {/* Big number */}
+                <div className="self-start">
+                  <p className="text-[30px] font-bold text-white tracking-tight leading-none tabular-nums">
+                    {fmt(totalViewsMonth)}
+                  </p>
+                  <p className="text-[11px] text-white/40 mt-0.5">
+                    {reels.filter(r => (r.taken_at ?? 0) >= monthAgo).length} роликов
+                  </p>
+                </div>
               </div>
+            </div>
+
+            {/* ── MIDDLE TOP: мини-граф просмотров (wide, row 1) ────────────── */}
+            <motion.button
+              onClick={() => setSubView('charts')}
+              className={cn(CARD, "p-4 text-left active:scale-[0.98] transition-transform")}
+              whileTap={{ scale: 0.98 }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[12px] font-semibold text-slate-700">Просмотры</p>
+                <div className="flex items-center gap-1 text-slate-400">
+                  <span className="text-[10px]">Открыть</span>
+                  <ChevronRight className="w-3 h-3" />
+                </div>
+              </div>
+              {chartData.length >= 2 ? (
+                <AreaChart data={chartData} aspectRatio="2.6 / 1" margin={{ top: 8, right: 8, bottom: 20, left: 32 }}>
+                  <Grid horizontal numTicksRows={2} />
+                  <Area dataKey="views" fill="#6366f1" fillOpacity={0.13} stroke="#6366f1" strokeWidth={1.5} fadeEdges />
+                  <YAxis numTicks={2} formatValue={(v) => fmt(v as number)} />
+                  <XAxis numTicks={3} />
+                  <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
+                </AreaChart>
+              ) : (
+                <div className="h-16 flex items-center justify-center">
+                  <p className="text-xs text-slate-300">Мало данных</p>
+                </div>
+              )}
+            </motion.button>
+
+            {/* ── RIGHT TOP: Роликов в базе (narrow, row 1) ────────────────── */}
+            <motion.div
+              className={cn(CARD, "p-4 flex flex-col justify-between")}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+            >
+              <div className="flex items-center gap-1 mb-3">
+                <Film className="w-3.5 h-3.5 text-slate-400" />
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Роликов</p>
+              </div>
+              <div>
+                <p className="text-[26px] font-bold text-slate-900 leading-none tabular-nums">{stats?.totalReels || 0}</p>
+                <p className="text-[10px] text-slate-400 mt-1">в базе</p>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">Ср. просм.</p>
+                <p className="text-[16px] font-bold text-slate-700 tabular-nums">{fmt(stats?.avgViewsLast30Days || 0)}</p>
+              </div>
+            </motion.div>
+
+            {/* ── BOTTOM RIGHT (cols 2-3): лучший рилс недели ────────────────── */}
+            {stats?.bestReelWeek ? (
+              <motion.button
+                onClick={() => setSelectedReel(stats.bestReelWeek!)}
+                className={cn(CARD, "p-3 text-left flex items-center gap-3 active:scale-[0.98] transition-transform")}
+                style={{ gridColumn: '2 / 4' }}
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <div className="relative w-12 h-[68px] rounded-xl overflow-hidden flex-shrink-0 bg-slate-100">
+                  {stats.bestReelWeek.thumbnail_url
+                    ? <img src={stats.bestReelWeek.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                    : <Film className="w-4 h-4 text-slate-300 m-auto mt-5" />
+                  }
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 mb-1">
+                    <Award className="w-3 h-3 text-amber-500" />
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Лучший рилс недели</p>
+                  </div>
+                  <p className="text-[15px] font-bold text-slate-900 tabular-nums">{fmt(stats.bestReelWeek.latest_view_count ?? 0)}</p>
+                  <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{stats.bestReelWeek.caption || 'Без подписи'}</p>
+                </div>
+              </motion.button>
+            ) : (
+              <motion.div
+                className={cn(CARD, "flex items-center justify-center p-3")}
+                style={{ gridColumn: '2 / 4' }}
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+              >
+                <Award className="w-6 h-6 text-slate-200" />
+                <p className="text-xs text-slate-300 ml-2">Лучший рилс недели</p>
+              </motion.div>
             )}
           </div>
 
-          {/* Row 3: Charts card — clickable tile */}
-          <motion.button
-            onClick={() => setSubView('charts')}
-            className={cn(CARD, "w-full p-4 text-left active:scale-[0.98] transition-transform")}
-            whileTap={{ scale: 0.98 }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-semibold text-slate-700">Просмотры</p>
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <span className="text-[11px]">Открыть</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-            {chartData.length >= 2 ? (
-              <AreaChart data={chartData} aspectRatio="3 / 1" margin={{ top: 10, right: 10, bottom: 24, left: 36 }}>
-                <Grid horizontal numTicksRows={3} />
-                <Area dataKey="views" fill="#6366f1" fillOpacity={0.12} stroke="#6366f1" strokeWidth={2} fadeEdges />
-                <YAxis numTicks={3} formatValue={(v) => fmt(v as number)} />
-                <XAxis numTicks={4} />
-                <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
-              </AreaChart>
-            ) : (
-              <div className="h-24 flex items-center justify-center text-center">
-                <p className="text-sm text-slate-400">Нужно минимум 2 обновления</p>
-              </div>
-            )}
-          </motion.button>
-
-          {/* Row 4: Reels preview card — clickable tile */}
+          {/* ── Full-width: Reels preview ──────────────────────────────────────── */}
           <motion.button
             onClick={() => setSubView('reels')}
             className={cn(CARD, "w-full p-4 text-left active:scale-[0.98] transition-transform")}
             whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}
           >
             <div className="flex items-center justify-between mb-3">
               <p className="text-[13px] font-semibold text-slate-700">Ролики</p>
@@ -1054,27 +1200,20 @@ export function Analytics() {
             </div>
             {previewReels.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {previewReels.map(reel => {
-                  const takenAt = reel.taken_at
-                    ? new Date(reel.taken_at * 1000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-                    : undefined;
-                  return (
-                    <div key={reel.id} className="relative rounded-xl overflow-hidden bg-slate-100" style={{ aspectRatio: '9/16' }}>
-                      {reel.thumbnail_url
-                        ? <img src={reel.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center"><Film className="w-4 h-4 text-slate-300" /></div>
-                      }
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                      {takenAt && (
-                        <p className="absolute bottom-1 left-0 right-0 text-center text-white/80 text-[8px] font-medium">{takenAt}</p>
-                      )}
-                    </div>
-                  );
-                })}
+                {previewReels.map(reel => (
+                  <div key={reel.id} className="relative rounded-xl overflow-hidden bg-slate-100" style={{ aspectRatio: '9/16' }}>
+                    {reel.thumbnail_url
+                      ? <img src={reel.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Film className="w-4 h-4 text-slate-300" /></div>
+                    }
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <p className="absolute bottom-1 left-0 right-0 text-center text-white/70 text-[8px] font-medium">
+                      {reel.taken_at ? new Date(reel.taken_at * 1000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : ''}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <p className="text-sm text-slate-400">Нет роликов</p>
-            )}
+            ) : <p className="text-sm text-slate-400">Нет роликов</p>}
           </motion.button>
         </motion.div>
       </div>
