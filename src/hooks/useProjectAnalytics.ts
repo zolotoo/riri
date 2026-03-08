@@ -40,14 +40,6 @@ export interface ReelWithHistory extends ProjectReel {
 
 export type SyncCount = 12 | 24 | 36;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Проверяет что projectId — настоящий UUID из Supabase, а не временный локальный ID */
-function isRealProjectId(id: string | null): boolean {
-  if (!id) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-}
-
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useProjectAnalytics(projectId: string | null) {
@@ -61,7 +53,7 @@ export function useProjectAnalytics(projectId: string | null) {
 
   // ── Load reels + snapshots from DB ──────────────────────────────────────────
   const loadAnalytics = useCallback(async () => {
-    if (!projectId || !isRealProjectId(projectId)) return;
+    if (!projectId) return;
     setLoading(true);
     try {
       const userId = user?.id;
@@ -126,7 +118,7 @@ export function useProjectAnalytics(projectId: string | null) {
 
   // ── Load project instagram username ─────────────────────────────────────────
   const loadProjectConfig = useCallback(async () => {
-    if (!projectId || !isRealProjectId(projectId)) return;
+    if (!projectId) return;
     const { data } = await supabase
       .from('projects')
       .select('analytics_instagram_username')
@@ -139,7 +131,7 @@ export function useProjectAnalytics(projectId: string | null) {
 
   // ── Save instagram username to project ──────────────────────────────────────
   const setInstagramUsername = useCallback(async (username: string) => {
-    if (!projectId || !isRealProjectId(projectId)) return;
+    if (!projectId) return;
     const clean = username.replace(/^@/, '').trim().toLowerCase();
     const { error } = await supabase
       .from('projects')
@@ -152,10 +144,6 @@ export function useProjectAnalytics(projectId: string | null) {
   // ── Sync reels from Instagram API ───────────────────────────────────────────
   const syncReels = useCallback(async (username: string, count: SyncCount = 12) => {
     if (!projectId) return;
-    if (!isRealProjectId(projectId)) {
-      toast.error('Проект ещё не сохранён. Обновите страницу и попробуйте снова.');
-      return;
-    }
     setSyncing(true);
     try {
       // Fetch from Instagram via our API

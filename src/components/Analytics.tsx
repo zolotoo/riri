@@ -652,10 +652,6 @@ export function Analytics() {
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
 
-  const isValidProject = currentProjectId
-    ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentProjectId)
-    : false;
-
   useEffect(() => {
     if (currentProjectId) {
       loadProjectConfig();
@@ -768,30 +764,11 @@ export function Analytics() {
           </div>
         )}
 
-        {/* Invalid project (temp local ID — not yet saved to DB) */}
-        {!loading && !isValidProject && (
-          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mb-4">
-              <AlertCircle className="w-7 h-7 text-amber-500" />
-            </div>
-            <h3 className="text-base font-semibold text-slate-700">Проект не сохранён</h3>
-            <p className="text-sm text-slate-500 mt-1 max-w-xs">
-              Обновите страницу — проект должен синхронизироваться с сервером
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-medium hover:bg-slate-200 transition-colors"
-            >
-              Обновить страницу
-            </button>
-          </div>
-        )}
-
         {/* No account */}
-        {!loading && isValidProject && !hasAccount && <EmptyState onSetup={() => setShowSetupModal(true)} />}
+        {!loading && !hasAccount && <EmptyState onSetup={() => setShowSetupModal(true)} />}
 
         {/* Has account, no data */}
-        {!loading && isValidProject && hasAccount && !hasData && (
+        {!loading && hasAccount && !hasData && (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
               <BarChart2 className="w-7 h-7 text-slate-400" />
@@ -804,7 +781,7 @@ export function Analytics() {
         )}
 
         {/* Main content with data */}
-        {!loading && isValidProject && hasData && (
+        {!loading && hasData && (
           <>
             {/* Stats grid */}
             <div className="grid grid-cols-2 gap-3">

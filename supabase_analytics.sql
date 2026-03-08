@@ -6,7 +6,7 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS analytics_instagram_username TEXT;
 -- 2. Table: stores all reels belonging to a project's Instagram account
 CREATE TABLE IF NOT EXISTS project_reels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  project_id UUID NOT NULL,
+  project_id TEXT NOT NULL,
   shortcode TEXT NOT NULL,
   instagram_id TEXT,
   thumbnail_url TEXT,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS project_reels (
 CREATE TABLE IF NOT EXISTS reel_metrics_snapshots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reel_id UUID NOT NULL REFERENCES project_reels(id) ON DELETE CASCADE,
-  project_id UUID NOT NULL,
+  project_id TEXT NOT NULL,
   view_count INTEGER DEFAULT 0,
   like_count INTEGER DEFAULT 0,
   comment_count INTEGER DEFAULT 0,
