@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   for (let page = 0; page < MAX_PAGES; page++) {
     try {
       let apiUrl = `https://instagram-scraper-20251.p.rapidapi.com/userreels/?username_or_id=${cleanUsername}&url_embed_safe=true`;
-      if (cursor) apiUrl += `&maxId=${encodeURIComponent(cursor)}`;
+      if (cursor) apiUrl += `&pagination_token=${encodeURIComponent(cursor)}`;
 
       console.log(`Page ${page + 1} url: ${apiUrl.split('?')[1]}`);
 
