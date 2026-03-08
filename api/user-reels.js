@@ -44,76 +44,102 @@ export default async function handler(req, res) {
     !item.is_pinned && !item.pinned && !item.is_highlight && !item.highlight &&
     !item.is_featured && !item.featured && !item.pinned_reel && !item.highlight_reel;
 
-  // Paginated mode (for analytics: count = 12/24/36)
-  const targetCount = count ? Math.min(Number(count), 36) : 0;
-  const pagesNeeded = targetCount > 0 ? Math.ceil(targetCount / 12) : 1;
+  const targetCount = count ? Math.min(Number(count), 36) : 12;
 
-  console.log(`Fetching reels for @${cleanUsername}, pages=${pagesNeeded}, target=${targetCount || 'default'}`);
+  console.log(`Fetching reels for @${cleanUsername}, target=${targetCount}`);
 
   const allReels = [];
-  let nextCursor = null;
 
-  for (let page = 0; page < pagesNeeded; page++) {
-    try {
-      let apiUrl = `https://instagram-scraper-20251.p.rapidapi.com/userreels/?username_or_id=${cleanUsername}&url_embed_safe=true`;
-      if (nextCursor) apiUrl += `&next_cursor=${encodeURIComponent(nextCursor)}`;
+  // ── Strategy 1: pass count directly (same approach as /hashtag/ and /searchreels/) ──
+  try {
+    const apiUrl = `https://instagram-scraper-20251.p.rapidapi.com/userreels/?username_or_id=${cleanUsername}&url_embed_safe=true&count=${targetCount}`;
+    console.log('Strategy 1 (count param):', apiUrl);
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com',
-          'x-rapidapi-key': RAPIDAPI_KEY,
-        },
-      });
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com',
+        'x-rapidapi-key': RAPIDAPI_KEY,
+      },
+    });
 
-      console.log(`Page ${page + 1} status:`, response.status);
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error(`Page ${page + 1} error:`, response.status, errText.slice(0, 200));
-        break;
-      }
-
+    if (response.ok) {
       const data = await response.json();
-
-      // Always log structure so we can debug pagination cursor location
-      console.log(`Page ${page + 1} top-level keys:`, Object.keys(data));
+      console.log('S1 top-level keys:', Object.keys(data));
       if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
-        console.log(`Page ${page + 1} data keys:`, Object.keys(data.data));
+        console.log('S1 data keys:', Object.keys(data.data));
       }
-      console.log(`Page ${page + 1} preview:`, JSON.stringify(data).slice(0, 800));
 
       const items = parseItems(data);
-      console.log(`Page ${page + 1} items count:`, items.length);
-      if (items.length === 0) { console.log(`No items on page ${page + 1}`); break; }
+      console.log('S1 items count:', items.length);
 
-      const reels = items.filter(filterPinned).map(mapReel).filter(r => r.shortcode);
-      allReels.push(...reels);
+      if (items.length >= targetCount || items.length >= 24) {
+        // count param worked — use this result
+        const reels = items.filter(filterPinned).map(mapReel).filter(r => r.shortcode);
+        allReels.push(...reels);
+        console.log('S1 success, using direct count result');
+      } else if (items.length > 0) {
+        // Got fewer than requested — need pagination
+        const reels = items.filter(filterPinned).map(mapReel).filter(r => r.shortcode);
+        allReels.push(...reels);
 
-      // Try every known cursor field name
-      nextCursor =
-        data?.data?.next_cursor ||
-        data?.data?.next_max_id ||
-        data?.data?.end_cursor ||
-        data?.data?.paging_info?.max_id ||
-        data?.next_cursor ||
-        data?.next_max_id ||
-        data?.pagination_token ||
-        data?.cursor ||
-        null;
+        // Extract cursor — check every known path
+        const rawCursor =
+          data?.data?.next_cursor ||
+          data?.data?.next_max_id ||
+          data?.data?.end_cursor ||
+          data?.data?.page_info?.end_cursor ||
+          data?.data?.paging_info?.max_id ||
+          data?.data?.user?.edge_owner_to_timeline_media?.page_info?.end_cursor ||
+          data?.next_cursor ||
+          data?.next_max_id ||
+          data?.pagination_token ||
+          data?.cursor ||
+          null;
 
-      console.log(`Page ${page + 1} next_cursor:`, nextCursor);
+        console.log('S1 cursor found:', rawCursor);
 
-      if (!nextCursor && page < pagesNeeded - 1) {
-        console.log('No cursor found, stopping pagination');
-        break;
+        // Log structure to help debug for future
+        console.log('S1 full response (first 1200 chars):', JSON.stringify(data).slice(0, 1200));
+
+        if (rawCursor && allReels.length < targetCount) {
+          // ── Strategy 2: paginate with cursor ──
+          const pagesNeeded = Math.ceil((targetCount - allReels.length) / 12);
+
+          for (let page = 0; page < pagesNeeded; page++) {
+            await new Promise(r => setTimeout(r, 400));
+
+            // Try both max_id and next_cursor as param names
+            const cursorParam = encodeURIComponent(rawCursor);
+            const pageUrl = `https://instagram-scraper-20251.p.rapidapi.com/userreels/?username_or_id=${cleanUsername}&url_embed_safe=true&max_id=${cursorParam}`;
+            console.log(`S2 page ${page + 1}:`, pageUrl);
+
+            const pageResp = await fetch(pageUrl, {
+              method: 'GET',
+              headers: {
+                'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com',
+                'x-rapidapi-key': RAPIDAPI_KEY,
+              },
+            });
+
+            if (!pageResp.ok) { console.log('S2 page error:', pageResp.status); break; }
+
+            const pageData = await pageResp.json();
+            const pageItems = parseItems(pageData);
+            console.log(`S2 page ${page + 1} items:`, pageItems.length);
+            if (pageItems.length === 0) break;
+
+            const pageReels = pageItems.filter(filterPinned).map(mapReel).filter(r => r.shortcode);
+            allReels.push(...pageReels);
+            if (allReels.length >= targetCount) break;
+          }
+        }
       }
-
-      if (page < pagesNeeded - 1) await new Promise(r => setTimeout(r, 300));
-    } catch (e) {
-      console.error(`Page ${page + 1} exception:`, e.message);
-      break;
+    } else {
+      console.error('S1 HTTP error:', response.status);
     }
+  } catch (e) {
+    console.error('S1 exception:', e.message);
   }
 
   // Deduplicate
