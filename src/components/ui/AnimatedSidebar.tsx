@@ -82,7 +82,6 @@ type DesktopSidebarProps = SidebarBodyProps;
 export const DesktopSidebar = ({
   className,
   children,
-  variant = 'default',
 }: DesktopSidebarProps) => {
   return (
     <motion.div
