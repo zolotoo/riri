@@ -60,13 +60,21 @@ export default async function handler(req, res) {
 
       console.log(`Page ${page + 1} url: ${apiUrl.split('?')[1]}`);
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com',
-          'x-rapidapi-key': RAPIDAPI_KEY,
-        },
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      let response;
+      try {
+        response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-host': 'instagram-scraper-20251.p.rapidapi.com',
+            'x-rapidapi-key': RAPIDAPI_KEY,
+          },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         console.error(`Page ${page + 1} HTTP error:`, response.status);
@@ -77,7 +85,11 @@ export default async function handler(req, res) {
       const items = parseItems(data);
       console.log(`Page ${page + 1} items: ${items.length}, cursor_before: ${cursor ? cursor.slice(0, 20) : 'null'}`);
 
-      if (items.length === 0) break;
+      if (items.length === 0) {
+        // Log full response to diagnose empty results (account not found, private, etc.)
+        console.log(`Page ${page + 1} empty response:`, JSON.stringify(data).slice(0, 600));
+        break;
+      }
 
       const reels = items.filter(filterPinned).map(mapReel).filter(r => r.shortcode);
       allReels.push(...reels);

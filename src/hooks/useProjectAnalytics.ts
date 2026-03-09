@@ -165,7 +165,10 @@ export function useProjectAnalytics(projectId: string | null) {
       const data = await res.json();
 
       if (!data.success || !data.reels?.length) {
-        toast.error('Не удалось получить рилсы. Проверьте username и попробуйте снова.');
+        toast.error(
+          `Аккаунт @${username} не найден или недоступен. Проверь никнейм — он должен быть публичным.`,
+          { duration: 6000 }
+        );
         return;
       }
 
