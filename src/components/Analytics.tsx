@@ -215,24 +215,59 @@ function ChartModeToggle({ value, onChange }: { value: ChartMode; onChange: (m: 
 
 const MIN_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 час
 
+type SyncOption = { count: SyncCount; tokenAction: 'analytics_sync_12' | 'analytics_sync_24' | 'analytics_sync_36' | 'analytics_sync_48' | 'analytics_sync_60' };
+
+const PRIMARY_OPTIONS: SyncOption[] = [
+  { count: 12, tokenAction: 'analytics_sync_12' },
+  { count: 24, tokenAction: 'analytics_sync_24' },
+];
+const EXTENDED_OPTIONS: SyncOption[] = [
+  { count: 36, tokenAction: 'analytics_sync_36' },
+  { count: 48, tokenAction: 'analytics_sync_48' },
+  { count: 60, tokenAction: 'analytics_sync_60' },
+];
+
+function SyncOptionBtn({ o, syncing, onClick }: { o: SyncOption; syncing: boolean; onClick: () => void }) {
+  const { canAfford } = useTokenBalance();
+  const cost = getTokenCost(o.tokenAction);
+  const affordable = canAfford(cost);
+  return (
+    <motion.button
+      onClick={onClick}
+      disabled={syncing || !affordable}
+      className={cn(
+        'w-full flex items-center justify-between px-5 py-4 rounded-2xl transition-all touch-manipulation',
+        'border shadow-sm active:scale-[0.98]',
+        affordable
+          ? 'bg-white/70 border-white/80 hover:bg-white/90 hover:shadow-md'
+          : 'bg-slate-50/50 border-slate-100 opacity-50 cursor-not-allowed',
+        syncing && 'opacity-60 cursor-not-allowed',
+      )}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      whileTap={affordable && !syncing ? { scale: 0.97 } : {}}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="text-[26px] font-bold text-slate-900 tracking-tight leading-none">{o.count}</span>
+        <span className="text-[13px] font-medium text-slate-500">роликов</span>
+      </div>
+      {syncing ? <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" /> : <CoinBadge coins={cost} size="sm" />}
+    </motion.button>
+  );
+}
+
 function SyncModal({ onSync, onClose, syncing, lastSyncAt }: {
   onSync: (count: SyncCount) => void;
   onClose: () => void;
   syncing: boolean;
   lastSyncAt: string | null;
 }) {
-  const { balance, canAfford } = useTokenBalance();
+  const { balance } = useTokenBalance();
+  const [showExtended, setShowExtended] = useState(false);
 
   const msSinceLast = lastSyncAt ? Date.now() - new Date(lastSyncAt).getTime() : Infinity;
   const cooldownLeft = Math.max(0, MIN_SYNC_INTERVAL_MS - msSinceLast);
   const cooldownMins = Math.ceil(cooldownLeft / 60000);
   const isCooling = cooldownLeft > 0;
-
-  const options: { count: SyncCount; tokenAction: 'analytics_sync_12' | 'analytics_sync_24' | 'analytics_sync_36' }[] = [
-    { count: 12, tokenAction: 'analytics_sync_12' },
-    { count: 24, tokenAction: 'analytics_sync_24' },
-    { count: 36, tokenAction: 'analytics_sync_36' },
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
@@ -257,50 +292,48 @@ function SyncModal({ onSync, onClose, syncing, lastSyncAt }: {
             </button>
           </div>
 
-          {/* Cooldown warning */}
           {isCooling && (
             <div className="mx-4 mb-3 flex items-center gap-2 px-4 py-3 rounded-2xl bg-amber-50/80 border border-amber-100">
               <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
               <p className="text-[12px] text-amber-700">
-                Следующее обновление доступно через <b>{cooldownMins} мин</b>.
-                Для лучшего графика обновляй не чаще раза в час.
+                Следующее обновление через <b>{cooldownMins} мин</b>. Для графика лучше обновлять раз в час.
               </p>
             </div>
           )}
 
-          <div className="px-4 pb-6 space-y-2.5">
-            {options.map((o, i) => {
-              const cost = getTokenCost(o.tokenAction);
-              const affordable = canAfford(cost);
-              return (
-                <motion.button
-                  key={o.count}
-                  onClick={() => onSync(o.count)}
-                  disabled={syncing || !affordable}
-                  className={cn(
-                    'w-full flex items-center justify-between px-5 py-4 rounded-2xl transition-all touch-manipulation',
-                    'border shadow-sm active:scale-[0.98]',
-                    affordable
-                      ? 'bg-white/70 border-white/80 hover:bg-white/90 hover:shadow-md'
-                      : 'bg-slate-50/50 border-slate-100 opacity-50 cursor-not-allowed',
-                    syncing && 'opacity-60 cursor-not-allowed'
-                  )}
-                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06, type: 'spring', stiffness: 400, damping: 28 }}
-                  whileTap={affordable && !syncing ? { scale: 0.97 } : {}}
+          <div className="px-4 pb-4 space-y-2.5">
+            {PRIMARY_OPTIONS.map(o => (
+              <SyncOptionBtn key={o.count} o={o} syncing={syncing} onClick={() => onSync(o.count)} />
+            ))}
+          </div>
+
+          {/* Expandable extended options */}
+          <div className="px-4 pb-6">
+            <button
+              onClick={() => setShowExtended(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 rounded-2xl bg-slate-100/60 border border-slate-200/50 text-slate-500 hover:bg-slate-100 transition-colors touch-manipulation"
+            >
+              <span className="text-[13px] font-medium">Больше роликов</span>
+              <motion.div animate={{ rotate: showExtended ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <ChevronRight className="w-4 h-4 rotate-90" />
+              </motion.div>
+            </button>
+
+            <AnimatePresence>
+              {showExtended && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: 'easeInOut' }}
+                  className="overflow-hidden"
                 >
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[28px] font-bold text-slate-900 tracking-tight leading-none">{o.count}</span>
-                    <span className="text-[13px] font-medium text-slate-500">роликов</span>
+                  <div className="pt-2.5 space-y-2.5">
+                    {EXTENDED_OPTIONS.map(o => (
+                      <SyncOptionBtn key={o.count} o={o} syncing={syncing} onClick={() => onSync(o.count)} />
+                    ))}
                   </div>
-                  {syncing ? (
-                    <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />
-                  ) : (
-                    <CoinBadge coins={cost} size="sm" />
-                  )}
-                </motion.button>
-              );
-            })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </motion.div>
@@ -637,7 +670,7 @@ type SubView = 'overview' | 'reels' | 'charts';
 export function Analytics() {
   const { currentProjectId } = useProjectContext();
   const {
-    reels, loading, syncing, stats, instagramUsername, lastSyncAt,
+    reels, snapshots, loading, syncing, stats, instagramUsername, lastSyncAt,
     loadAnalytics, loadProjectConfig, setInstagramUsername, syncReels,
     getReelSnapshots, buildChartData,
   } = useProjectAnalytics(currentProjectId);
@@ -676,6 +709,8 @@ export function Analytics() {
   }, [instagramUsername, syncReels, deduct, canAfford]);
 
   const chartData = useMemo(() => buildChartData(period, chartMode), [buildChartData, period, chartMode]);
+  // True when chart data comes from reel pub dates (no historical snapshots yet)
+  const chartIsFromReels = snapshots.length === 0 && chartData.length > 0;
 
   const sortedReels = useMemo(() => {
     return [...reels].sort((a, b) => {
@@ -877,8 +912,15 @@ export function Analytics() {
           </div>
           {/* Views */}
           <div className={cn(CARD, "p-4")}>
-            <p className="text-[13px] font-semibold text-slate-700 mb-3">Просмотры</p>
-            {chartData.length >= 2 ? (
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[13px] font-semibold text-slate-700">Просмотры</p>
+              {chartIsFromReels && (
+                <span className="text-[10px] font-medium text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  по дате выпуска ролика
+                </span>
+              )}
+            </div>
+            {chartData.length >= 1 ? (
               <AreaChart data={chartData} aspectRatio="2.2 / 1" margin={{ top: 16, right: 16, bottom: 32, left: 44 }}>
                 <Grid horizontal numTicksRows={4} />
                 <Area dataKey="views" fill="#6366f1" fillOpacity={0.13} stroke="#6366f1" strokeWidth={2} fadeEdges />
@@ -889,12 +931,12 @@ export function Analytics() {
             ) : (
               <div className="h-36 flex flex-col items-center justify-center text-center">
                 <AlertCircle className="w-8 h-8 text-slate-200 mb-2" />
-                <p className="text-sm text-slate-400">Нужно минимум 2 обновления</p>
+                <p className="text-sm text-slate-400">Обнови, чтобы увидеть данные</p>
               </div>
             )}
           </div>
           {/* Likes + Comments */}
-          {chartData.length >= 2 && (
+          {chartData.length >= 1 && (
             <div className={cn(CARD, "p-4")}>
               <p className="text-[13px] font-semibold text-slate-700 mb-3">Лайки и комментарии</p>
               <AreaChart data={chartData} aspectRatio="2.2 / 1" margin={{ top: 16, right: 16, bottom: 32, left: 44 }}>
@@ -1012,13 +1054,18 @@ export function Analytics() {
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
             >
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[12px] font-semibold text-slate-700">Просмотры</p>
+                <div>
+                  <p className="text-[12px] font-semibold text-slate-700">Просмотры</p>
+                  {chartIsFromReels && (
+                    <p className="text-[9px] text-indigo-400 font-medium mt-0.5">по дате выпуска</p>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 text-slate-400">
                   <span className="text-[10px]">Открыть</span>
                   <ChevronRight className="w-3 h-3" />
                 </div>
               </div>
-              {chartData.length >= 2 ? (
+              {chartData.length >= 1 ? (
                 <AreaChart data={chartData} aspectRatio="1.8 / 1" margin={{ top: 8, right: 8, bottom: 20, left: 32 }}>
                   <Grid horizontal numTicksRows={2} />
                   <Area dataKey="views" fill="#6366f1" fillOpacity={0.13} stroke="#6366f1" strokeWidth={1.5} fadeEdges />

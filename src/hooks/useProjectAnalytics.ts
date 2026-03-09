@@ -307,11 +307,6 @@ export function useProjectAnalytics(projectId: string | null) {
     period: 'day' | 'week' | 'month',
     mode: 'cumulative' | 'release_week'
   ) => {
-    if (snapshots.length === 0) return [];
-
-    // Group snapshots by date bucket
-    const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
-
     const getBucketKey = (date: Date) => {
       if (period === 'day') {
         return date.toISOString().slice(0, 10);
@@ -327,7 +322,40 @@ export function useProjectAnalytics(projectId: string | null) {
       }
     };
 
-    // Build a map of reel publication dates
+    const toSorted = (map: Map<string, { views: number; likes: number; comments: number; date: Date }>) =>
+      Array.from(map.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, v]) => ({
+          date: new Date(v.date.toISOString().slice(0, 10)),
+          views: v.views,
+          likes: v.likes,
+          comments: v.comments,
+        }));
+
+    // ── Fallback: build from reel publication dates (no snapshots needed) ──────
+    // Groups reels by their release date and sums current view counts.
+    // Available immediately after the first sync.
+    if (snapshots.length === 0) {
+      if (reels.length === 0) return [];
+      const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
+      for (const reel of reels) {
+        if (!reel.taken_at) continue;
+        const date = new Date(reel.taken_at * 1000);
+        const key = getBucketKey(date);
+        const existing = bucketMap.get(key);
+        const v = reel.latest_view_count || 0;
+        const l = reel.latest_like_count || 0;
+        const c = reel.latest_comment_count || 0;
+        bucketMap.set(key, existing
+          ? { views: existing.views + v, likes: existing.likes + l, comments: existing.comments + c, date: existing.date }
+          : { views: v, likes: l, comments: c, date }
+        );
+      }
+      return toSorted(bucketMap);
+    }
+
+    // ── Full mode: use snapshot history ──────────────────────────────────────
+    const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
     const reelPubMap = new Map<string, number>();
     for (const reel of reels) {
       if (reel.taken_at) reelPubMap.set(reel.id, reel.taken_at * 1000);
@@ -338,41 +366,19 @@ export function useProjectAnalytics(projectId: string | null) {
       const reelPubMs = reelPubMap.get(snap.reel_id);
 
       if (mode === 'release_week' && reelPubMs) {
-        // Only count if the reel was published in the same bucket
         const reelPubDate = new Date(reelPubMs);
-        const snapBucket = getBucketKey(snapDate);
-        const reelBucket = getBucketKey(reelPubDate);
-        if (snapBucket !== reelBucket) continue;
+        if (getBucketKey(snapDate) !== getBucketKey(reelPubDate)) continue;
       }
 
       const key = getBucketKey(snapDate);
       const existing = bucketMap.get(key);
-
-      if (!existing) {
-        bucketMap.set(key, {
-          views: snap.view_count,
-          likes: snap.like_count,
-          comments: snap.comment_count,
-          date: snapDate,
-        });
-      } else {
-        bucketMap.set(key, {
-          views: existing.views + snap.view_count,
-          likes: existing.likes + snap.like_count,
-          comments: existing.comments + snap.comment_count,
-          date: existing.date,
-        });
-      }
+      bucketMap.set(key, existing
+        ? { views: existing.views + snap.view_count, likes: existing.likes + snap.like_count, comments: existing.comments + snap.comment_count, date: existing.date }
+        : { views: snap.view_count, likes: snap.like_count, comments: snap.comment_count, date: snapDate }
+      );
     }
 
-    return Array.from(bucketMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, v]) => ({
-        date: new Date(v.date.toISOString().slice(0, 10)),
-        views: v.views,
-        likes: v.likes,
-        comments: v.comments,
-      }));
+    return toSorted(bucketMap);
   }, [snapshots, reels]);
 
   return {

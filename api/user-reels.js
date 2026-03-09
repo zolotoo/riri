@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     !item.is_pinned && !item.pinned && !item.is_highlight && !item.highlight &&
     !item.is_featured && !item.featured && !item.pinned_reel && !item.highlight_reel;
 
-  const targetCount = count ? Math.min(Number(count), 36) : 12;
+  const targetCount = count ? Math.min(Number(count), 60) : 12;
   // API always returns 12 per page; cursor lives at top-level: data.pagination_token
   const MAX_PAGES = Math.ceil(targetCount / 12);
 
