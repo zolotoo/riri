@@ -341,10 +341,10 @@ export function useProjectAnalytics(projectId: string | null) {
           comments: v.comments,
         }));
 
-    // ── Fallback: build from reel publication dates (no snapshots needed) ──────
-    // Groups reels by their release date and sums current view counts.
-    // Available immediately after the first sync.
-    if (snapshots.length === 0) {
+    // ── "Точечно" (release_week): group reels by PUBLICATION date, sum current views ──
+    // Always available after the first sync — no historical snapshots required.
+    // Example: week 3 bar = sum of current views of all reels published in week 3.
+    if (mode === 'release_week') {
       if (reels.length === 0) return [];
       const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
       for (const reel of reels) {
@@ -363,22 +363,42 @@ export function useProjectAnalytics(projectId: string | null) {
       return toSorted(bucketMap);
     }
 
-    // ── Full mode: use snapshot history ──────────────────────────────────────
-    const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
-    const reelPubMap = new Map<string, number>();
-    for (const reel of reels) {
-      if (reel.taken_at) reelPubMap.set(reel.id, reel.taken_at * 1000);
+    // ── "Общее" (cumulative): snapshot-based timeline ─────────────────────────
+    // Shows how total views changed over time based on snapshot dates.
+    // Requires at least 1 sync with snapshots. Falls back to publication-date
+    // cumulative sum when no snapshots are available.
+    if (snapshots.length === 0) {
+      // Fallback: build cumulative sum from reel publication dates + current views
+      if (reels.length === 0) return [];
+      const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
+      for (const reel of reels) {
+        if (!reel.taken_at) continue;
+        const date = new Date(reel.taken_at * 1000);
+        const key = getBucketKey(date);
+        const existing = bucketMap.get(key);
+        const v = reel.latest_view_count || 0;
+        const l = reel.latest_like_count || 0;
+        const c = reel.latest_comment_count || 0;
+        bucketMap.set(key, existing
+          ? { views: existing.views + v, likes: existing.likes + l, comments: existing.comments + c, date: existing.date }
+          : { views: v, likes: l, comments: c, date }
+        );
+      }
+      // Apply cumulative sum so each bucket accumulates all prior buckets
+      const sorted = toSorted(bucketMap);
+      let cumViews = 0, cumLikes = 0, cumComments = 0;
+      return sorted.map(pt => {
+        cumViews += pt.views;
+        cumLikes += pt.likes;
+        cumComments += pt.comments;
+        return { ...pt, views: cumViews, likes: cumLikes, comments: cumComments };
+      });
     }
 
+    // Full snapshot-based cumulative timeline
+    const bucketMap = new Map<string, { views: number; likes: number; comments: number; date: Date }>();
     for (const snap of snapshots) {
       const snapDate = new Date(snap.snapshotted_at);
-      const reelPubMs = reelPubMap.get(snap.reel_id);
-
-      if (mode === 'release_week' && reelPubMs) {
-        const reelPubDate = new Date(reelPubMs);
-        if (getBucketKey(snapDate) !== getBucketKey(reelPubDate)) continue;
-      }
-
       const key = getBucketKey(snapDate);
       const existing = bucketMap.get(key);
       bucketMap.set(key, existing

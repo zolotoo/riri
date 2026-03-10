@@ -201,12 +201,12 @@ function ChartModeToggle({ value, onChange }: { value: ChartMode; onChange: (m: 
       <button onClick={() => onChange('cumulative')}
         className={cn('px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all',
           value === 'cumulative' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
-        Накопл.
+        Общее
       </button>
       <button onClick={() => onChange('release_week')}
         className={cn('px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all',
           value === 'release_week' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
-        По выпуску
+        Точечно
       </button>
     </div>
   );
@@ -806,8 +806,10 @@ export function Analytics() {
   }, [instagramUsername, syncReels, deduct, canAfford]);
 
   const chartData = useMemo(() => buildChartData(period, chartMode), [buildChartData, period, chartMode]);
-  // True when chart data comes from reel pub dates (no historical snapshots yet)
-  const chartIsFromReels = snapshots.length === 0 && chartData.length > 0;
+  // Subtitle label for the chart based on mode + data availability
+  const chartSubtitle = chartMode === 'release_week'
+    ? 'просмотры роликов по дате выпуска'
+    : snapshots.length === 0 ? 'накоплением по дате выпуска' : null;
 
   const sortedReels = useMemo(() => {
     return [...reels].sort((a, b) => {
@@ -1010,12 +1012,12 @@ export function Analytics() {
           {/* Views */}
           <div className={cn(CARD, "p-4")}>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-semibold text-slate-700">Просмотры</p>
-              {chartIsFromReels && (
-                <span className="text-[10px] font-medium text-indigo-400 bg-indigo-50 px-2 py-0.5 rounded-full">
-                  по дате выпуска ролика
-                </span>
-              )}
+              <div>
+                <p className="text-[13px] font-semibold text-slate-700">Просмотры</p>
+                {chartSubtitle && (
+                  <p className="text-[10px] text-indigo-400 font-medium mt-0.5">{chartSubtitle}</p>
+                )}
+              </div>
             </div>
             {chartData.length >= 1 ? (
               <AreaChart data={chartData} aspectRatio="2.2 / 1" margin={{ top: 16, right: 16, bottom: 32, left: 44 }}>
@@ -1153,8 +1155,8 @@ export function Analytics() {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <p className="text-[12px] font-semibold text-slate-700">Просмотры</p>
-                  {chartIsFromReels && (
-                    <p className="text-[9px] text-indigo-400 font-medium mt-0.5">по дате выпуска</p>
+                  {chartSubtitle && (
+                    <p className="text-[9px] text-indigo-400 font-medium mt-0.5">{chartSubtitle}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-slate-400">
