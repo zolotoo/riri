@@ -9,7 +9,7 @@ import {
   getOrUpdateProfileStats,
   saveProfileStatsFromReels,
   shouldUpdateStats,
-  getProfileStats,
+  getProfileStats as getProfileStatsFromDB,
   InstagramProfileStats,
 } from '../services/profileStatsService';
 
@@ -618,7 +618,7 @@ export function useRadar(
 
         // Рассчитываем статистику профиля из уже полученных роликов — без доп. API запроса.
         // Обновляем только если данные устарели (>7 дней) или отсутствуют.
-        const existingStats = await getProfileStats(cleanUsername);
+        const existingStats = await getProfileStatsFromDB(cleanUsername);
         if (!existingStats || shouldUpdateStats(existingStats)) {
           saveProfileStatsFromReels(cleanUsername, data.reels).then(stats => {
             if (stats) {
