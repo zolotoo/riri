@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'hashtag is required' });
   }
 
-  const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '60b367f230mshd3ca48b7e1fa21cp18f206jsn57b97472bcca';
+  const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || 'ff21c60e3dmsh5f27d005cc9811dp1d106ejsn8dc341d3ceb2';
   const RAPIDAPI_HOST = 'instagram-scraper-20251.p.rapidapi.com';
 
   try {
