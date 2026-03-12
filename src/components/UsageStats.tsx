@@ -39,6 +39,15 @@ interface UserSummary {
   total_requests: number;
 }
 
+/** Раздел → действие → пользователь → { calls, requests } */
+interface SectionActionUserRow {
+  section: string;
+  action: string;
+  user_id: string;
+  calls: number;
+  requests: number;
+}
+
 interface DaySummary {
   date: string;
   rapidapi: number;
@@ -71,11 +80,11 @@ const API_LABELS: Record<string, string> = {
 
 const ACTION_LABELS: Record<string, string> = {
   'reel-info': 'Инфо о рилсе',
-  'user-reels': 'Рилсы пользователя',
+  'user-reels': 'Рилсы пользователя (аналитика/радар)',
   'search': 'Поиск',
   'hashtag': 'Поиск по хэштегу',
-  'download': 'Скачивание',
-  'transcribe': 'Транскрипция',
+  'download': 'Скачивание видео',
+  'transcribe': 'Транскрипция видео',
   'transcribe-carousel': 'Транскрипция карусели',
   'translate': 'Перевод',
   'script-analyze': 'Анализ стиля',
@@ -83,7 +92,53 @@ const ACTION_LABELS: Record<string, string> = {
   'script-refine': 'Улучшение сценария',
   'script-refine-diff': 'Рефайн по правкам',
   'script-chat': 'Чат с AI',
+  'scriptwriter-quick-generate': 'Быстрая генерация',
+  'scriptwriter-clarify-topic': 'Уточнение темы',
+  'scriptwriter-generate-hooks': 'Генерация хуков',
+  'scriptwriter-generate-body': 'Генерация тела',
+  'scriptwriter-assemble-script': 'Сборка сценария',
+  'scriptwriter-improve-script': 'Улучшение',
+  'scriptwriter-refine': 'Рефайн',
+  'scriptwriter-analyze-structure': 'Анализ структуры',
 };
+
+/** Раздел приложения, в котором находится кнопка */
+const ACTION_TO_SECTION: Record<string, string> = {
+  'user-reels': 'Аналитика / Радар',
+  'reel-info': 'Лента / Поиск / Карусели',
+  'search': 'Поиск',
+  'hashtag': 'Поиск',
+  'download': 'Лента (видео)',
+  'transcribe': 'Лента (видео)',
+  'transcribe-carousel': 'Карусели',
+  'translate': 'Лента (видео)',
+  'script-analyze': 'AI-сценарист',
+  'script-generate': 'AI-сценарист',
+  'script-refine': 'AI-сценарист',
+  'script-refine-diff': 'AI-сценарист',
+  'script-chat': 'AI-сценарист',
+  'scriptwriter-quick-generate': 'AI-сценарист',
+  'scriptwriter-clarify-topic': 'AI-сценарист',
+  'scriptwriter-generate-hooks': 'AI-сценарист',
+  'scriptwriter-generate-body': 'AI-сценарист',
+  'scriptwriter-assemble-script': 'AI-сценарист',
+  'scriptwriter-improve-script': 'AI-сценарист',
+  'scriptwriter-refine': 'AI-сценарист',
+  'scriptwriter-analyze-structure': 'AI-сценарист',
+};
+
+function getSection(action: string): string {
+  return ACTION_TO_SECTION[action] || 'Другое';
+}
+
+function getActionLabel(action: string): string {
+  if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+  if (action.startsWith('scriptwriter-')) {
+    const sub = action.replace('scriptwriter-', '').replace(/-/g, ' ');
+    return sub.charAt(0).toUpperCase() + sub.slice(1);
+  }
+  return action;
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -151,7 +206,39 @@ export function UsageStats() {
       map[uid].total_calls += 1;
       map[uid].total_requests += r.calls_count;
     }
-    return Object.values(map).sort((a, b) => b.total_requests - a.total_requests).slice(0, 10);
+    return Object.values(map).sort((a, b) => b.total_requests - a.total_requests);
+  })();
+
+  /** Полная разбивка: раздел → кнопка → пользователь */
+  const sectionActionUser: SectionActionUserRow[] = (() => {
+    const map = new Map<string, SectionActionUserRow>();
+    for (const r of rows) {
+      const section = getSection(r.action);
+      const uid = r.user_id || '(неизвестен)';
+      const key = `${section}::${r.action}::${uid}`;
+      const cur = map.get(key);
+      if (cur) {
+        cur.calls += 1;
+        cur.requests += r.calls_count;
+      } else {
+        map.set(key, { section, action: r.action, user_id: uid, calls: 1, requests: r.calls_count });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.requests - a.requests);
+  })();
+
+  /** Группировка по разделам: section -> actions -> users */
+  const bySection = (() => {
+    const sections = new Map<string, Map<string, Map<string, { calls: number; requests: number }>>>();
+    for (const r of sectionActionUser) {
+      if (!sections.has(r.section)) sections.set(r.section, new Map());
+      const actions = sections.get(r.section)!;
+      if (!actions.has(r.action)) actions.set(r.action, new Map());
+      const users = actions.get(r.action)!;
+      const cur = users.get(r.user_id) || { calls: 0, requests: 0 };
+      users.set(r.user_id, { calls: cur.calls + r.calls, requests: cur.requests + r.requests });
+    }
+    return sections;
   })();
 
   const dailyChart: DaySummary[] = (() => {
@@ -334,13 +421,13 @@ export function UsageStats() {
             <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-slate-400" />
-                По действиям
+                По кнопкам (действиям)
               </h2>
-              <div className="space-y-2">
-                {actionSummary.slice(0, 10).map(s => (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {actionSummary.map(s => (
                   <ApiBar
                     key={`${s.api_name}::${s.action}`}
-                    label={ACTION_LABELS[s.action] || s.action}
+                    label={getActionLabel(s.action)}
                     sublabel={API_LABELS[s.api_name] || s.api_name}
                     requests={s.total_requests}
                     calls={s.total_calls}
@@ -353,31 +440,69 @@ export function UsageStats() {
           </div>
 
           {/* By user */}
-          {userSummary.some(u => u.user_id !== '(неизвестен)') && (
-            <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                <Users className="w-4 h-4 text-slate-400" />
-                По пользователям
-              </h2>
-              <div className="space-y-2">
-                {userSummary.map(u => (
-                  <ApiBar
-                    key={u.user_id}
-                    label={u.user_id === '(неизвестен)' ? '(без user_id — авто-запросы)' : `@${u.user_id}`}
-                    requests={u.total_requests}
-                    calls={u.total_calls}
-                    color="#64748b"
-                    max={userSummary[0]?.total_requests || 1}
-                  />
-                ))}
-              </div>
-              {userSummary.some(u => u.user_id === '(неизвестен)') && (
-                <p className="text-xs text-slate-400 mt-3">
-                  * Авто-запросы — обновление превью и синхронизации без явного действия пользователя
-                </p>
-              )}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4 text-slate-400" />
+              По пользователям
+            </h2>
+            <div className="space-y-2">
+              {userSummary.map(u => (
+                <ApiBar
+                  key={u.user_id}
+                  label={u.user_id === '(неизвестен)' ? '(без user_id — авто-запросы)' : `@${u.user_id}`}
+                  requests={u.total_requests}
+                  calls={u.total_calls}
+                  color="#64748b"
+                  max={userSummary[0]?.total_requests || 1}
+                />
+              ))}
             </div>
-          )}
+            {userSummary.some(u => u.user_id === '(неизвестен)') && (
+              <p className="text-xs text-slate-400 mt-3">
+                * Авто-запросы — обновление превью и синхронизации без явного действия пользователя
+              </p>
+            )}
+          </div>
+
+          {/* По разделам → кнопки → пользователи */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-slate-400" />
+              По разделам, кнопкам и пользователям
+            </h2>
+            <div className="space-y-6">
+              {[...bySection.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([section, actions]) => (
+                <div key={section}>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{section}</h3>
+                  <div className="space-y-3 pl-2 border-l-2 border-slate-100">
+                    {[...actions.entries()].sort((a, b) => {
+                      const sumA = [...a[1].values()].reduce((s, u) => s + u.requests, 0);
+                      const sumB = [...b[1].values()].reduce((s, u) => s + u.requests, 0);
+                      return sumB - sumA;
+                    }).map(([action, users]) => {
+                      const totalRequests = [...users.values()].reduce((s, u) => s + u.requests, 0);
+                      const totalCalls = [...users.values()].reduce((s, u) => s + u.calls, 0);
+                      return (
+                        <div key={action}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-slate-700">{getActionLabel(action)}</span>
+                            <span className="text-xs text-slate-400">{totalCalls} вызовов · {fmt(totalRequests)}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+                            {[...users.entries()].sort((a, b) => b[1].requests - a[1].requests).map(([uid, { calls, requests }]) => (
+                              <span key={uid} title={`${calls} вызовов`}>
+                                {uid === '(неизвестен)' ? '(авто)' : `@${uid}`}: {fmt(requests)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Recent log */}
           <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
@@ -410,7 +535,7 @@ export function UsageStats() {
                           {r.api_name}
                         </span>
                       </td>
-                      <td className="py-1.5 pr-3 text-slate-600">{ACTION_LABELS[r.action] || r.action}</td>
+                      <td className="py-1.5 pr-3 text-slate-600">{getActionLabel(r.action)}</td>
                       <td className="py-1.5 pr-3 font-medium text-slate-700">{r.calls_count}</td>
                       <td className="py-1.5 text-slate-400">{r.user_id || '—'}</td>
                     </tr>
