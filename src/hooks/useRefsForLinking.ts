@@ -15,22 +15,32 @@ export interface RefForLinking {
 
 /**
  * Исходники проекта для привязки к роликам: без shortcode и множество уже привязанных shortcode.
- * reelsWithoutLinkedRef = reels.filter(r => !linkedShortcodes.has(r.shortcode)).
+ * Загружает видео по project_id или по folder_id (папки проекта) — т.к. часть видео может иметь folder_id без project_id.
  */
-export function useRefsForLinking(projectId: string | null) {
+export function useRefsForLinking(projectId: string | null, folderIds: string[] = []) {
   const [refs, setRefs] = useState<RefForLinking[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refetch = useCallback(async () => {
-    if (!projectId) {
+    if (!projectId && folderIds.length === 0) {
       setRefs([]);
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
-      .from('saved_videos')
-      .select('id, shortcode, folder_id, caption, thumbnail_url, responsibles, script_responsible, editing_responsible')
-      .eq('project_id', projectId);
+    const orParts: string[] = [];
+    if (projectId) orParts.push(`project_id.eq.${projectId}`);
+    if (folderIds.length > 0) orParts.push(`folder_id.in.(${folderIds.join(',')})`);
+    const orFilter = orParts.join(',');
+
+    const { data, error } = orFilter
+      ? await supabase
+          .from('saved_videos')
+          .select('id, shortcode, folder_id, caption, thumbnail_url, responsibles, script_responsible, editing_responsible')
+          .or(orFilter)
+      : await supabase
+          .from('saved_videos')
+          .select('id, shortcode, folder_id, caption, thumbnail_url, responsibles, script_responsible, editing_responsible')
+          .eq('project_id', projectId!);
     if (error) {
       setRefs([]);
       setLoading(false);
@@ -59,7 +69,7 @@ export function useRefsForLinking(projectId: string | null) {
       };
     }));
     setLoading(false);
-  }, [projectId]);
+  }, [projectId, folderIds.join(',')]);
 
   useEffect(() => {
     refetch();

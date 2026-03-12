@@ -284,7 +284,8 @@ export function VideoDetailPage({ video, onBack, onRefreshData }: VideoDetailPag
   const { updateVideoFolder, updateVideoScript, updateVideoTranscript, updateVideoTranslation, updateVideoResponsible, updateVideoLinks, updateVideoShortcode } = useInboxVideos();
   const { canAfford, deduct } = useTokenBalance();
   const { reels } = useProjectAnalytics(currentProjectId);
-  const { linkedShortcodes, refetch: refetchRefs } = useRefsForLinking(currentProjectId);
+  const refFolderIds = (currentProject?.folders ?? []).map(f => f.id);
+  const { linkedShortcodes, refetch: refetchRefs } = useRefsForLinking(currentProjectId, refFolderIds);
   const reelsToOffer = reelsWithoutLinkedRef(reels, linkedShortcodes);
   const [showReelPicker, setShowReelPicker] = useState(false);
   const hasNoShortcode = !video.shortcode || String(video.shortcode).trim() === '';

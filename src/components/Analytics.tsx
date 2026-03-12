@@ -461,7 +461,8 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
   const [showRefPicker, setShowRefPicker] = useState(false);
   const { addVideoToInbox, updateVideoShortcode, updateVideoResponsible } = useInboxVideos();
   const { currentProject } = useProjectContext();
-  const { refs, refsWithoutShortcode, refetch: refetchRefs } = useRefsForLinking(currentProject?.id ?? null);
+  const folderIds = (currentProject?.folders ?? []).map(f => f.id);
+  const { refs, refsWithoutShortcode, refetch: refetchRefs } = useRefsForLinking(currentProject?.id ?? null, folderIds);
   const participants = useParticipantsForResponsibles(currentProject?.id ?? null);
   const rolesTemplate = (currentProject?.responsiblesTemplate ?? [{ id: 'resp-0', label: 'За сценарий' }, { id: 'resp-1', label: 'За монтаж' }]) as { id: string; label: string }[];
   const [showResponsiblePicker, setShowResponsiblePicker] = useState(false);
@@ -692,11 +693,11 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                         <button
                           type="button"
                           onClick={() => setShowResponsiblePicker(true)}
-                          className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 touch-manipulation flex items-center gap-1.5"
+                          className="p-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-600 touch-manipulation flex items-center gap-1.5 shadow-sm min-h-[40px]"
                           title="Выбрать ответственного"
                         >
                           <UserPlus className="w-4 h-4" />
-                          <span className="text-[11px] font-medium">Ответственный</span>
+                          <span className="text-[12px] font-semibold">Ответственный</span>
                         </button>
                         <button
                           type="button"
@@ -735,7 +736,7 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                         >
                           <div className="space-y-1 max-h-40 overflow-y-auto">
                             {refsWithoutShortcode.length === 0 ? (
-                              <p className="text-[12px] text-slate-400 px-2 py-2">Нет исходников без привязки. Добавь видео в папки в ленте.</p>
+                              <p className="text-[12px] text-slate-500 px-2 py-2">Нет видео в папках. Добавь видео в папки проекта в ленте.</p>
                             ) : (
                               refsWithoutShortcode.map((ref) => (
                                 <button
@@ -940,7 +941,8 @@ export function Analytics() {
     getReelSnapshots, buildChartData,
   } = useProjectAnalytics(currentProjectId);
   const { stats: responsiblesStats, byRole } = useResponsiblesStats(currentProjectId, reels);
-  const { refs, refsWithoutShortcode, linkedShortcodes, refetch: refetchRefsForLinking } = useRefsForLinking(currentProjectId);
+  const folderIdsForRefs = (currentProject?.folders ?? []).map(f => f.id);
+  const { refs, refsWithoutShortcode, linkedShortcodes, refetch: refetchRefsForLinking } = useRefsForLinking(currentProjectId, folderIdsForRefs);
   const { updateVideoShortcode, updateVideoResponsible } = useInboxVideos();
   const reelsWithoutRef = reelsWithoutLinkedRef(reels, linkedShortcodes);
   const participants = useParticipantsForResponsibles(currentProjectId);
@@ -1279,19 +1281,39 @@ export function Analytics() {
             Сумма просмотров роликов, у которых указан ответственный. Заполняйте логины в карточках видео в ленте.
           </p>
 
-          {/* Прикрепления: исходники без привязки ↔ ролики без исходника */}
-          {(refsWithoutShortcode.length > 0 || reelsWithoutRef.length > 0) && (
-            <div className={cn(CARD, 'p-4 space-y-4')}>
-              <p className="text-[13px] font-semibold text-slate-700">Прикрепления</p>
-              <p className="text-[11px] text-slate-500">Свяжи исходники из папок с выложенными роликами — тогда просмотры попадут в отчёт по ответственным.</p>
-              {refsWithoutShortcode.length > 0 && (
+          {/* Прикрепления: все исходники из папок + ролики. Показываем всегда блок, при пустоте — подсказку */}
+          <div
+            className="p-5 space-y-5 rounded-3xl overflow-hidden mb-4"
+            style={{
+              background: 'rgba(255,255,255,0.7)',
+              backdropFilter: 'blur(24px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.8)',
+              boxShadow: '0 8px 32px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
+          >
+            <div>
+              <p className="text-[17px] font-semibold text-slate-800 tracking-tight">Прикрепления</p>
+              <p className="text-[13px] text-slate-500 mt-1">Свяжи исходники с роликами и выбери ответственного — участники берутся из проекта.</p>
+            </div>
+          {(refs.length > 0 || reelsWithoutRef.length > 0) ? (
+            <>
+              {refs.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-2">Исходники без привязки</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {refsWithoutShortcode.map((ref) => {
+                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-3">Исходники в папках</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {refs.map((ref) => {
                       const folderName = ref.folder_id ? (currentProject?.folders?.find(f => f.id === ref.folder_id)?.name ?? null) : null;
                       return (
-                        <div key={ref.id} className="rounded-xl overflow-hidden bg-slate-50 border border-slate-100">
+                        <div
+                          key={ref.id}
+                          className="rounded-2xl overflow-hidden border transition-shadow hover:shadow-lg"
+                          style={{
+                            background: 'rgba(255,255,255,0.75)',
+                            backdropFilter: 'blur(16px) saturate(150%)',
+                            borderColor: 'rgba(255,255,255,0.9)',
+                            boxShadow: '0 4px 20px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)',
+                          }}
+                        >
                           <div className="aspect-[9/16] bg-slate-200 relative">
                             {ref.thumbnail_url ? (
                               <img src={ref.thumbnail_url} alt="" className="w-full h-full object-cover" />
@@ -1323,13 +1345,29 @@ export function Analytics() {
                                 <button type="button" onClick={() => setLinkReelForRefId(null)} className="w-full text-center py-1 text-[10px] text-slate-400 hover:text-slate-600">Отмена</button>
                               </div>
                             ) : (
-                              <div className="flex gap-2 mt-2">
-                                <button type="button" onClick={() => setLinkReelForRefId(ref.id)} className="flex-1 py-2 rounded-xl bg-indigo-500/10 text-indigo-600 text-[11px] font-medium touch-manipulation flex items-center justify-center gap-1">
-                                  <Link2 className="w-3.5 h-3.5" />Привязать
-                                </button>
-                                <button type="button" onClick={() => setResponsiblePickerRefId(ref.id)} className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-600 text-[11px] font-medium touch-manipulation flex items-center justify-center gap-1">
-                                  <UserPlus className="w-3.5 h-3.5" />Ответственный
-                                </button>
+                              <div className="flex flex-col gap-2 mt-3">
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setLinkReelForRefId(ref.id)}
+                                    className="flex-1 py-2.5 rounded-xl text-[12px] font-semibold touch-manipulation flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border border-indigo-200/60"
+                                    style={{ background: 'rgba(99,102,241,0.12)', color: '#4338ca' }}
+                                  >
+                                    <Link2 className="w-4 h-4" /> Привязать
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResponsiblePickerRefId(ref.id)}
+                                    className="flex-1 py-2.5 rounded-xl text-[12px] font-semibold touch-manipulation flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] border border-slate-300/80 bg-slate-700 text-white shadow-sm hover:bg-slate-600"
+                                  >
+                                    <UserPlus className="w-4 h-4" /> Ответственный
+                                  </button>
+                                </div>
+                                {ref.responsibles?.length ? (
+                                  <p className="text-[10px] text-slate-500">
+                                    {ref.responsibles.map(r => r.value).join(', ')}
+                                  </p>
+                                ) : null}
                               </div>
                             )}
                           </div>
@@ -1341,10 +1379,19 @@ export function Analytics() {
               )}
               {reelsWithoutRef.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-2">Ролики без исходника</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-3">Ролики без исходника</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {reelsWithoutRef.map((reel) => (
-                      <div key={reel.id} className="rounded-xl overflow-hidden bg-slate-50 border border-slate-100">
+                      <div
+                        key={reel.id}
+                        className="rounded-2xl overflow-hidden border transition-shadow hover:shadow-lg"
+                        style={{
+                          background: 'rgba(255,255,255,0.75)',
+                          backdropFilter: 'blur(16px) saturate(150%)',
+                          borderColor: 'rgba(255,255,255,0.9)',
+                          boxShadow: '0 4px 20px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.9)',
+                        }}
+                      >
                         <div className="aspect-[9/16] bg-slate-200 relative">
                           {reel.thumbnail_url ? (
                             <img src={reel.thumbnail_url} alt="" className="w-full h-full object-cover" />
@@ -1359,7 +1406,7 @@ export function Analytics() {
                           {linkRefForReelShortcode === reel.shortcode ? (
                             <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
                               <p className="text-[10px] font-medium text-slate-500">Выбери исходник:</p>
-                              {refsWithoutShortcode.map((r) => {
+                              {refs.map((r) => {
                                 const folderName = r.folder_id ? (currentProject?.folders?.find(f => f.id === r.folder_id)?.name ?? null) : null;
                                 return (
                                   <button key={r.id} type="button" onClick={() => handleLinkRefToReel(r.id, reel.shortcode)}
@@ -1379,8 +1426,13 @@ export function Analytics() {
                               <button type="button" onClick={() => setLinkRefForReelShortcode(null)} className="w-full text-center py-1 text-[10px] text-slate-400 hover:text-slate-600">Отмена</button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => setLinkRefForReelShortcode(reel.shortcode)} className="mt-2 w-full py-2 rounded-xl bg-indigo-500/10 text-indigo-600 text-[11px] font-medium touch-manipulation flex items-center justify-center gap-1.5">
-                              <Link2 className="w-3.5 h-3.5" />Привязать
+                            <button
+                              type="button"
+                              onClick={() => setLinkRefForReelShortcode(reel.shortcode)}
+                              className="mt-2 w-full py-2.5 rounded-xl text-[12px] font-semibold touch-manipulation flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+                              style={{ background: 'rgba(99,102,241,0.15)', color: '#4f46e5' }}
+                            >
+                              <Link2 className="w-4 h-4" /> Привязать
                             </button>
                           )}
                         </div>
@@ -1389,8 +1441,21 @@ export function Analytics() {
                   </div>
                 </div>
               )}
+            </>
+          ) : (
+            <div className="py-10 text-center rounded-2xl" style={{
+              background: 'rgba(241,245,249,0.6)',
+              border: '1px dashed rgba(148,163,184,0.5)',
+            }}>
+              <Film className="w-14 h-14 text-slate-300 mx-auto mb-4" strokeWidth={1.2} />
+              <p className="text-[16px] font-semibold text-slate-700">Нет видео в папках</p>
+              <p className="text-[14px] text-slate-500 mt-2 max-w-sm mx-auto leading-relaxed">
+                Добавь видео в папки в ленте — перетащи ролик в папку или выбери папку в карточке видео.
+              </p>
+              <p className="text-[12px] text-slate-400 mt-2">Убедись, что выбран нужный проект.</p>
             </div>
           )}
+          </div>
 
           {responsiblePickerRefId && (() => {
             const ref = refs.find(r => r.id === responsiblePickerRefId);

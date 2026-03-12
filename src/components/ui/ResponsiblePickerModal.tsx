@@ -70,10 +70,11 @@ export function ResponsiblePickerModal({
       <motion.div
         className="relative w-full max-w-sm mx-4 max-h-[85vh] flex flex-col rounded-t-3xl md:rounded-3xl overflow-hidden safe-bottom"
         style={{
-          background: 'rgba(255,255,255,0.85)',
-          backdropFilter: 'blur(24px) saturate(180%)',
-          border: '1px solid rgba(255,255,255,0.6)',
-          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.8)',
+          background: 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(32px) saturate(200%)',
+          WebkitBackdropFilter: 'blur(32px) saturate(200%)',
+          border: '1px solid rgba(255,255,255,0.9)',
+          boxShadow: '0 32px 64px -16px rgba(15,23,42,0.2), inset 0 1px 0 rgba(255,255,255,0.95)',
         }}
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
@@ -108,8 +109,8 @@ export function ResponsiblePickerModal({
                     onClick={() => handleRoleSelect(role)}
                     className={cn(
                       "w-full flex items-center justify-between p-4 rounded-2xl transition-all touch-manipulation text-left",
-                      "bg-white/80 border border-slate-200/70",
-                      "hover:bg-slate-50 hover:border-slate-300/70 active:scale-[0.99]"
+                      "bg-white/90 border border-slate-200/80 shadow-sm",
+                      "hover:bg-white hover:border-slate-300 hover:shadow-md active:scale-[0.99]"
                     )}
                   >
                     <span className="text-[15px] font-medium text-slate-800">{role.label}</span>
@@ -139,8 +140,8 @@ export function ResponsiblePickerModal({
                     disabled={saving}
                     className={cn(
                       "w-full flex items-center gap-3 p-4 rounded-2xl transition-all touch-manipulation text-left",
-                      "bg-white/80 border border-slate-200/70",
-                      "hover:bg-indigo-50/80 hover:border-indigo-200/60 active:scale-[0.99]",
+                      "bg-white/90 border border-slate-200/80 shadow-sm",
+                      "hover:bg-indigo-50 hover:border-indigo-200 hover:shadow-md active:scale-[0.99]",
                       "disabled:opacity-60 disabled:pointer-events-none"
                     )}
                   >
