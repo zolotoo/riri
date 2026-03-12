@@ -787,8 +787,8 @@ function XAxisLabel({ label, x, crosshairX, isHovering, tickerHalfWidth }: {
     else if (distance < fadeRadius) opacity = (distance - tickerHalfWidth) / fadeBuffer;
   }
   return (
-    <div className="absolute" style={{ left: x, bottom: 12, width: 0, display: "flex", justifyContent: "center" }}>
-      <motion.span animate={{ opacity }} className="whitespace-nowrap text-xs" style={{ color: chartCssVars.label }}
+    <div className="absolute" style={{ left: x, bottom: 12, width: 0, display: "flex", justifyContent: "center", transform: "translateX(-50%)" }}>
+      <motion.span animate={{ opacity }} className="text-[10px] leading-tight" style={{ color: chartCssVars.label, maxWidth: "72px", textAlign: "center" }}
         initial={{ opacity: 1 }} transition={{ duration: 0.4, ease: "easeInOut" }}
       >
         {label}
@@ -1149,7 +1149,7 @@ function ChartInner({ width, height, data, xDataKey, formatXLabel, margin, anima
 
   return (
     <ChartProvider value={{ data, xScale, yScale, width, height, innerWidth, innerHeight, margin, columnWidth, tooltipData, setTooltipData, containerRef, lines, isLoaded, animationDuration, xAccessor, dateLabels, formatXLabel, selection, clearSelection }}>
-      <svg aria-hidden="true" height={height} width={width}>
+      <svg aria-hidden="true" height={height} width={width} style={{ overflow: "visible" }}>
         <rect fill="transparent" height={height} width={width} x={0} y={0} />
         <g {...interactionHandlers} style={interactionStyle} transform={`translate(${margin.left},${margin.top})`}>
           <rect fill="transparent" height={innerHeight} width={innerWidth} x={0} y={0} />
@@ -1166,7 +1166,7 @@ export function AreaChart({ data, xDataKey = "date", formatXLabel, margin: margi
   const margin = { ...DEFAULT_MARGIN, ...marginProp };
 
   return (
-    <div className={cn("relative w-full", className)} ref={containerRef} style={{ aspectRatio, touchAction: "none" }}>
+    <div className={cn("relative w-full overflow-visible min-w-0", className)} ref={containerRef} style={{ aspectRatio, touchAction: "none" }}>
       <ParentSize debounceTime={10}>
         {({ width, height }) => (
           <ChartInner animationDuration={animationDuration} containerRef={containerRef} data={data} formatXLabel={formatXLabel} height={height} margin={margin} width={width} xDataKey={xDataKey}>
