@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../utils/supabase';
+import { supabase, setUserContext } from '../utils/supabase';
 import { useAuth } from './useAuth';
 
 export interface ProjectFolder {
@@ -133,21 +133,28 @@ export function useProjects() {
   const fetchProjects = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? (projects.length > 0);
     const userId = getUserId();
+    // Не загружаем, если пользователь ещё не готов — иначе перезапишем список пустым
+    if (userId === 'anonymous') {
+      if (!silent) setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
-    
+
     try {
+      await setUserContext(userId);
+      const uid = userId.toLowerCase();
       // Загружаем собственные проекты
       const { data: ownProjects, error: ownError } = await supabase
         .from('projects')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', uid)
         .order('created_at', { ascending: true });
 
       // Загружаем общие проекты (где пользователь является участником, включая pending)
       const { data: sharedMemberships } = await supabase
         .from('project_members')
         .select('project_id, status')
-        .eq('user_id', userId)
+        .eq('user_id', uid)
         .in('status', ['active', 'pending']); // Включаем pending приглашения
 
       // Проверяем, какие из собственных проектов являются общими (есть участники или is_shared=true)
@@ -287,8 +294,8 @@ export function useProjects() {
         try {
           await supabase.from('projects').insert({
             id: defaultProject.id,
-            user_id: userId,
-            owner_id: userId,
+            user_id: uid,
+            owner_id: uid,
             name: defaultProject.name,
             color: defaultProject.color,
             icon: defaultProject.icon,
