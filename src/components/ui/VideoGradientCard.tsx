@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "../../utils/cn";
 import { proxyImageUrl, PLACEHOLDER_270x360 } from "../../utils/imagePlaceholder";
-import { Sparkles, MoreVertical, ArrowRight, Eye, Heart, Loader2, FileText, AlertCircle, MessageCircle, TrendingUp, Calendar, BookOpen } from "lucide-react";
+import { Sparkles, MoreVertical, ArrowRight, Eye, Heart, Loader2, FileText, AlertCircle, MessageCircle, TrendingUp, Calendar, BookOpen, PenLine } from "lucide-react";
 
 export interface VideoGradientCardProps {
   thumbnailUrl?: string;
@@ -34,6 +34,8 @@ export interface VideoGradientCardProps {
   className?: string;
   /** Первые карточки в ленте — eager loading */
   priority?: boolean;
+  /** Ручное видео без ссылки — показываем превью сценария */
+  isManual?: boolean;
 }
 
 function formatNumber(num?: number): string {
@@ -68,6 +70,7 @@ export const VideoGradientCard = ({
   shortcode,
   className,
   priority = false,
+  isManual = false,
 }: VideoGradientCardProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -139,43 +142,72 @@ export const VideoGradientCard = ({
         onTouchEnd={() => !isMobile && setTimeout(() => setIsHovered(false), 150)}
         onClick={onClick}
       >
-        {/* Превью: img, lazy на мобильных для ускорения */}
+        {/* Превью: для ручных видео — градиент + иконка сценария; для обычных — img */}
         <motion.div
           className="absolute inset-0 z-0 overflow-hidden"
           animate={{ scale: isMobile ? 1 : isHovered ? 1.08 : 1 }}
           transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
-          {/* Фон: пока грузится или ошибка — видимый плейсхолдер */}
-          <div className={cn(
-            "absolute inset-0 bg-slate-200",
-            !imgLoaded && !imgError && "animate-pulse"
-          )} />
-          <img
-            src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl)}
-            alt=""
-            className={cn(
-              "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
-              "opacity-100"
-            )}
-            loading={priority || !isMobile ? "eager" : "lazy"}
-            decoding="async"
-            fetchPriority={priority ? "high" : "auto"}
-            onLoad={(e) => {
-              setImgLoaded(true);
-              const loadedUrl = (e.target as HTMLImageElement).currentSrc || (e.target as HTMLImageElement).src;
-              if (onThumbnailLoad && videoId && shortcode && loadedUrl && !loadedUrl.startsWith('data:') && !loadedUrl.includes('supabase.co')) {
-                onThumbnailLoad(videoId, shortcode, loadedUrl);
-              }
-            }}
-            onError={() => {
-              setImgError(true);
-              setImgLoaded(true);
-              if (onThumbnailError && videoId && shortcode && !isRefreshingThumb) {
-                setIsRefreshingThumb(true);
-                Promise.resolve(onThumbnailError(videoId, shortcode)).finally(() => setIsRefreshingThumb(false));
-              }
-            }}
-          />
+          {isManual ? (
+            /* iOS 26 Liquid Glass–style превью для ручного сценария */
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center p-4"
+              style={{
+                background: 'linear-gradient(135deg, rgba(148,163,184,0.35) 0%, rgba(100,116,139,0.45) 40%, rgba(71,85,105,0.5) 70%, rgba(51,65,85,0.55) 100%)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 20px rgba(0,0,0,0.12)',
+              }}
+            >
+              <div
+                className="w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center mb-3"
+                style={{
+                  background: 'rgba(255,255,255,0.25)',
+                  backdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.3)',
+                }}
+              >
+                <PenLine className="w-7 h-7 md:w-8 md:h-8 text-white/95" strokeWidth={2} />
+              </div>
+              <span className="text-[11px] md:text-xs font-semibold text-white/90 text-center leading-tight line-clamp-3 max-w-full">
+                {caption || 'Сценарий без ссылки'}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className={cn(
+                "absolute inset-0 bg-slate-200",
+                !imgLoaded && !imgError && "animate-pulse"
+              )} />
+              <img
+                src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl)}
+                alt=""
+                className={cn(
+                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
+                  "opacity-100"
+                )}
+                loading={priority || !isMobile ? "eager" : "lazy"}
+                decoding="async"
+                fetchPriority={priority ? "high" : "auto"}
+                onLoad={(e) => {
+                  setImgLoaded(true);
+                  const loadedUrl = (e.target as HTMLImageElement).currentSrc || (e.target as HTMLImageElement).src;
+                  if (onThumbnailLoad && videoId && shortcode && loadedUrl && !loadedUrl.startsWith('data:') && !loadedUrl.includes('supabase.co')) {
+                    onThumbnailLoad(videoId, shortcode, loadedUrl);
+                  }
+                }}
+                onError={() => {
+                  setImgError(true);
+                  setImgLoaded(true);
+                  if (onThumbnailError && videoId && shortcode && !isRefreshingThumb) {
+                    setIsRefreshingThumb(true);
+                    Promise.resolve(onThumbnailError(videoId, shortcode)).finally(() => setIsRefreshingThumb(false));
+                  }
+                }}
+              />
+            </>
+          )}
         </motion.div>
 
         {/* Gradient overlay — ещё светлее, превью видно */}
@@ -198,7 +230,8 @@ export const VideoGradientCard = ({
           <div className="absolute top-2 md:top-3 left-2 md:left-3 right-2 md:right-3 flex items-center justify-between gap-1">
             {/* Badges container */}
             <div className="flex items-center gap-1 md:gap-1.5 flex-wrap">
-              {/* Viral badge */}
+              {/* Viral badge (скрыт для ручных) */}
+              {!isManual && (
               <motion.div
                 className={cn(
                   "px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 md:gap-1.5",
@@ -215,9 +248,10 @@ export const VideoGradientCard = ({
                 <Sparkles className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                 <span className="text-[10px] md:text-xs font-semibold whitespace-nowrap tabular-nums">{viralCoef > 0 ? Math.round(viralCoef) : '-'}</span>
               </motion.div>
+              )}
               
-              {/* Viral multiplier badge (отдельно рядом) */}
-              {viralMultiplier !== null && viralMultiplier !== undefined && (
+              {/* Viral multiplier badge (отдельно рядом, скрыт для ручных) */}
+              {!isManual && viralMultiplier !== null && viralMultiplier !== undefined && (
                 <motion.div
                   className={cn(
                     "px-1.5 md:px-2 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-0.5 md:gap-1",
@@ -297,15 +331,17 @@ export const VideoGradientCard = ({
 
           {/* Bottom content */}
           <div>
-            {/* Username as iOS 26 button - маленький и белый */}
+            {/* Username / badge — для ручных видео показываем «Сценарий» */}
             <motion.div
               className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)] mb-2 inline-flex max-w-full"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.15 }}
             >
-              <span className="text-[9px] md:text-[10px] font-semibold text-white/90 truncate max-w-[100px] md:max-w-[120px]">@{username || 'instagram'}</span>
-              {viralCoef > 5 && (
+              <span className="text-[9px] md:text-[10px] font-semibold text-white/90 truncate max-w-[100px] md:max-w-[120px]">
+                {isManual ? '✏️ Сценарий' : `@${username || 'instagram'}`}
+              </span>
+              {!isManual && viralCoef > 5 && (
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                   <svg className="w-1.5 h-1.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -314,9 +350,9 @@ export const VideoGradientCard = ({
               )}
             </motion.div>
 
-            {/* Stats line with icons - iOS 26 style liquid glass buttons */}
+            {/* Stats line with icons - iOS 26 style liquid glass buttons (скрываем для ручных) */}
             <div className="flex items-center gap-1.5 md:gap-2 mb-2 flex-wrap">
-              {viewCount !== undefined && (
+              {!isManual && viewCount !== undefined && (
                 <motion.div
                   className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -327,7 +363,7 @@ export const VideoGradientCard = ({
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(viewCount)}</span>
                 </motion.div>
               )}
-              {likeCount !== undefined && (
+              {!isManual && likeCount !== undefined && (
                 <motion.div
                   className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -338,7 +374,7 @@ export const VideoGradientCard = ({
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(likeCount)}</span>
                 </motion.div>
               )}
-              {commentCount !== undefined && (
+              {!isManual && commentCount !== undefined && (
                 <motion.div
                   className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -349,7 +385,7 @@ export const VideoGradientCard = ({
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(commentCount)}</span>
                 </motion.div>
               )}
-              {date && (
+              {!isManual && date && (
                 <motion.div
                   className="px-2.5 py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1.5 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -433,8 +469,8 @@ export const VideoGradientCard = ({
               </div>
             )}
 
-            {/* Caption */}
-            {caption && !folderBadge && (
+            {/* Caption (для ручных — уже показываем в превью, здесь доп. контекст) */}
+            {caption && !folderBadge && !isManual && (
               <p className="text-white/74 text-xs leading-relaxed line-clamp-2 mb-3 break-words overflow-hidden drop-shadow-[0_1px_3px_rgba(0,0,0,0.4)]">
                 {caption}
               </p>

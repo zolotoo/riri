@@ -8,7 +8,7 @@ import { useActionHistory } from '../hooks/useActionHistory';
 import { useProjectSync } from '../hooks/useProjectSync';
 import { useProjectPresence } from '../hooks/useProjectPresence';
 import { PresenceIndicator } from './ui/PresenceIndicator';
-import { Sparkles, FileText, Trash2, ExternalLink, Plus, Inbox, FolderOpen, Settings, GripVertical, X, Palette, Eye, Heart, ChevronDown, ChevronRight, Undo2, Images, Link2, Loader2, MessageCircle, BookOpen, TrendingUp } from 'lucide-react';
+import { Sparkles, FileText, Trash2, ExternalLink, Plus, Inbox, FolderOpen, Settings, GripVertical, X, Palette, Eye, Heart, ChevronDown, ChevronRight, Undo2, Images, Link2, Loader2, MessageCircle, BookOpen, TrendingUp, PenLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../utils/cn';
 import { proxyImageUrl } from '../utils/imagePlaceholder';
@@ -217,10 +217,16 @@ export function Workspace(_props?: WorkspaceProps) {
   const [selectedCarousel, setSelectedCarousel] = useState<SavedCarousel | null>(null);
   const [carouselLinkUrl, setCarouselLinkUrl] = useState('');
   const [isAddingCarouselByLink, setIsAddingCarouselByLink] = useState(false);
+  const [carouselAddToFolderId, setCarouselAddToFolderId] = useState<string | null>(null);
   const [carouselSortBy, setCarouselSortBy] = useState<'viral' | 'likes' | 'recent'>('viral');
   const [selectedCarouselFolderId, setSelectedCarouselFolderId] = useState<string | null>(null);
   const [reelLinkUrl, setReelLinkUrl] = useState('');
   const [isAddingReelByLink, setIsAddingReelByLink] = useState(false);
+  const [reelAddToFolderId, setReelAddToFolderId] = useState<string | null>(null);
+  const [showAddManualModal, setShowAddManualModal] = useState(false);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualScript, setManualScript] = useState('');
+  const [isAddingManual, setIsAddingManual] = useState(false);
   const [descriptionModalText, setDescriptionModalText] = useState<string | null>(null);
   const { carousels, loading: carouselsLoading, addCarousel, refreshCarouselThumbnail, refetch: refetchCarousels } = useCarousels();
   const { canAfford, deduct } = useTokenBalance();
@@ -501,6 +507,7 @@ export function Workspace(_props?: WorkspaceProps) {
     final_link: (v as any).final_link,
     links: (v as any).links,
     responsibles: (v as any).responsibles,
+    is_manual: (v as any).is_manual,
     status: 'active',
   });
 
@@ -748,6 +755,7 @@ export function Workspace(_props?: WorkspaceProps) {
       final_link: (selectedVideo as any).final_link,
       links: (selectedVideo as any).links,
       responsibles: (selectedVideo as any).responsibles,
+      is_manual: (selectedVideo as any).is_manual,
     },
     onBack: () => setSelectedVideo(null),
     onRefreshData: async () => { await refetchInboxVideos(); },
@@ -1365,77 +1373,103 @@ export function Workspace(_props?: WorkspaceProps) {
                 </div>
               </div>
             </div>
-            {/* Добавить рилс по ссылке — как во вкладке Карусели */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-4 pt-4 border-t border-white/55">
-                <div className="flex gap-2 flex-1 sm:min-w-[280px]">
-                  <input
-                    type="url"
-                    value={reelLinkUrl}
-                    onChange={e => setReelLinkUrl(e.target.value)}
-                    placeholder="Ссылка на рилс (instagram.com/reel/...)"
-                    className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl border border-white/60 bg-white/82 backdrop-blur-glass text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/70 focus:border-white/70 shadow-glass-sm"
-                  />
-                  <button
-                    onClick={async () => {
-                      const url = reelLinkUrl.trim();
-                      if (!url || !url.includes('instagram.com')) {
-                        toast.error('Вставь ссылку на рилс Instagram');
-                        return;
-                      }
-                      setIsAddingReelByLink(true);
-                      try {
-                        const res = await fetch('/api/reel-info', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ url, source: 'lenta' }),
-                        });
-                        const data = await res.json();
-                        if (data.success && !data.is_carousel) {
-                          const captionText = typeof data.caption === 'string' ? data.caption : 'Видео из Instagram';
-                          const savedVideo = await addVideoToInbox({
-                            title: captionText,
-                            previewUrl: data.thumbnail_url || '',
-                            url: data.url,
-                            viewCount: data.view_count,
-                            likeCount: data.like_count,
-                            commentCount: data.comment_count,
-                            ownerUsername: data.owner?.username,
-                            shortcode: data.shortcode,
-                            projectId: currentProjectId || undefined,
-                            folderId: undefined,
-                            takenAt: data.taken_at,
-                          });
-                          if (!savedVideo) {
+            {/* Добавить рилс по ссылке или вручную */}
+            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/55">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="flex gap-2 flex-1 sm:min-w-[280px]">
+                    <input
+                      type="url"
+                      value={reelLinkUrl}
+                      onChange={e => setReelLinkUrl(e.target.value)}
+                      placeholder="Ссылка на рилс (instagram.com/reel/...)"
+                      className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl border border-white/60 bg-white/82 backdrop-blur-glass text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/70 focus:border-white/70 shadow-glass-sm"
+                    />
+                    {/* Разделённая кнопка: Добавить + папка */}
+                    <div className="flex rounded-2xl overflow-hidden border border-white/60 bg-white/82 shadow-glass-sm">
+                      <button
+                        onClick={async () => {
+                          const url = reelLinkUrl.trim();
+                          if (!url || !url.includes('instagram.com')) {
+                            toast.error('Вставь ссылку на рилс Instagram');
                             return;
                           }
-                          setReelLinkUrl('');
-                          toast.success(
-                            savedVideo.saveAction === 'updated'
-                              ? 'Рилс уже был в разделе'
-                              : 'Рилс добавлен в раздел',
-                            {
-                              description: savedVideo.saveAction === 'updated'
-                                ? 'Обновили данные существующего видео'
-                                : undefined,
+                          setIsAddingReelByLink(true);
+                          try {
+                            const res = await fetch('/api/reel-info', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url, source: 'lenta' }),
+                            });
+                            const data = await res.json();
+                            if (data.success && !data.is_carousel) {
+                              const captionText = typeof data.caption === 'string' ? data.caption : 'Видео из Instagram';
+                              const savedVideo = await addVideoToInbox({
+                                title: captionText,
+                                previewUrl: data.thumbnail_url || '',
+                                url: data.url,
+                                viewCount: data.view_count,
+                                likeCount: data.like_count,
+                                commentCount: data.comment_count,
+                                ownerUsername: data.owner?.username,
+                                shortcode: data.shortcode,
+                                projectId: currentProjectId || undefined,
+                                folderId: reelAddToFolderId || undefined,
+                                takenAt: data.taken_at,
+                              });
+                              if (!savedVideo) {
+                                return;
+                              }
+                              setReelLinkUrl('');
+                              toast.success(
+                                savedVideo.saveAction === 'updated'
+                                  ? 'Рилс уже был в разделе'
+                                  : 'Рилс добавлен в раздел',
+                                {
+                                  description: savedVideo.saveAction === 'updated'
+                                    ? 'Обновили данные существующего видео'
+                                    : reelAddToFolderId ? getFolderName(reelAddToFolderId) : undefined,
+                                }
+                              );
+                            } else if (data.success && data.is_carousel) {
+                              toast.error('Это карусель. Добавляй во вкладке «Карусели».');
+                            } else {
+                              toast.error(data.error || 'Не удалось загрузить рилс. Проверь ссылку.');
                             }
-                          );
-                        } else if (data.success && data.is_carousel) {
-                          toast.error('Это карусель. Добавляй во вкладке «Карусели».');
-                        } else {
-                          toast.error(data.error || 'Не удалось загрузить рилс. Проверь ссылку.');
-                        }
-                      } catch (e) {
-                        toast.error('Ошибка при добавлении рилса');
-                      } finally {
-                        setIsAddingReelByLink(false);
-                      }
-                    }}
-                    disabled={isAddingReelByLink || !reelLinkUrl.trim()}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-700 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium transition-colors shrink-0 shadow-glass-sm"
+                          } catch (e) {
+                            toast.error('Ошибка при добавлении рилса');
+                          } finally {
+                            setIsAddingReelByLink(false);
+                          }
+                        }}
+                        disabled={isAddingReelByLink || !reelLinkUrl.trim()}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-l-2xl bg-slate-700 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium transition-colors shrink-0"
+                      >
+                        {isAddingReelByLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                        Добавить
+                        <TokenBadge tokens={getTokenCost('link_add')} />
+                      </button>
+                      <div className="relative group">
+                        <select
+                          value={reelAddToFolderId ?? ''}
+                          onChange={e => setReelAddToFolderId(e.target.value || null)}
+                          className="h-full pl-3 pr-8 py-2.5 bg-white/90 border-l border-white/60 text-slate-700 text-sm font-medium cursor-pointer appearance-none focus:outline-none min-w-[100px]"
+                          title="Папка для нового рилса"
+                        >
+                          <option value="">Без папки</option>
+                          {folderConfigs.map(f => (
+                            <option key={f.id ?? ''} value={f.id ?? ''}>{f.title}</option>
+                          ))}
+                        </select>
+                        <FolderOpen className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" strokeWidth={2.5} />
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAddManualModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/80 backdrop-blur-glass border border-white/60 text-slate-700 hover:bg-white/90 active:bg-white text-sm font-medium transition-colors shrink-0 shadow-glass-sm"
                   >
-                    {isAddingReelByLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                    Добавить
-                    <TokenBadge tokens={getTokenCost('link_add')} />
+                    <PenLine className="w-4 h-4" strokeWidth={2.5} />
+                    Сценарий без ссылки
                   </button>
                 </div>
               </div>
@@ -1487,6 +1521,7 @@ export function Workspace(_props?: WorkspaceProps) {
                     viralCoef={finalViralCoef}
                     viralMultiplier={viralMult}
                     folderBadge={folderBadge}
+                    isManual={!!(video as any).is_manual}
                     transcriptStatus={video.transcript_status}
                     onClick={() => setSelectedVideo(video)}
                     showFolderMenu={cardMenuVideoId === video.id}
@@ -1557,6 +1592,7 @@ export function Workspace(_props?: WorkspaceProps) {
                           )}
                         </div>
                         
+                        {!((video as any).is_manual) && video.url && (
                         <a
                           href={video.url}
                           target="_blank"
@@ -1567,6 +1603,7 @@ export function Workspace(_props?: WorkspaceProps) {
                           <ExternalLink className="w-4 h-4 text-blue-500" />
                           <span className="text-sm text-slate-700">Открыть</span>
                         </a>
+                        )}
                         
                         <div className="h-px bg-slate-100 my-1" />
                         
@@ -1643,62 +1680,80 @@ export function Workspace(_props?: WorkspaceProps) {
                         placeholder="Ссылка на пост с каруселью (instagram.com/p/...)"
                         className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl border border-white/60 bg-white/82 backdrop-blur-glass text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/70 focus:border-white/70 shadow-glass-sm"
                       />
-                      <button
-                        onClick={async () => {
-                          const url = carouselLinkUrl.trim();
-                          if (!url || !url.includes('instagram.com')) {
-                            toast.error('Вставь ссылку на пост Instagram');
-                            return;
-                          }
-                          const cost = getTokenCost('add_carousel');
-                          if (!canAfford(cost)) {
-                            toast.error('Недостаточно коинов');
-                            return;
-                          }
-                          setIsAddingCarouselByLink(true);
-                          try {
-                            const res = await fetch('/api/reel-info', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ url, source: 'carousel' }),
-                            });
-                            const data = await res.json();
-                            if (data.success && data.is_carousel && Array.isArray(data.carousel_slides) && data.carousel_slides.length > 0) {
-                              const added = await addCarousel({
-                                shortcode: data.shortcode,
-                                url: data.url,
-                                caption: data.caption,
-                                owner_username: data.owner?.username,
-                                like_count: data.like_count,
-                                comment_count: data.comment_count,
-                                taken_at: data.taken_at,
-                                slide_count: data.slide_count ?? data.carousel_slides.length,
-                                thumbnail_url: data.thumbnail_url ?? data.carousel_slides[0],
-                                slide_urls: data.carousel_slides,
-                              });
-                              if (added) {
-                                await deduct(cost);
-                                setCarouselLinkUrl('');
-                                toast.success('Карусель добавлена');
-                              }
-                            } else if (data.success && !data.is_carousel) {
-                              toast.error('Это не карусель - один пост. Добавляй посты с несколькими фото.');
-                            } else {
-                              toast.error(data.error || 'Не удалось загрузить пост. Проверьте ссылку.');
+                      {/* Разделённая кнопка: Добавить + папка */}
+                      <div className="flex rounded-2xl overflow-hidden border border-white/60 bg-white/82 shadow-glass-sm">
+                        <button
+                          onClick={async () => {
+                            const url = carouselLinkUrl.trim();
+                            if (!url || !url.includes('instagram.com')) {
+                              toast.error('Вставь ссылку на пост Instagram');
+                              return;
                             }
-                          } catch (e) {
-                            toast.error('Ошибка при добавлении карусели');
-                          } finally {
-                            setIsAddingCarouselByLink(false);
-                          }
-                        }}
-                        disabled={isAddingCarouselByLink || !carouselLinkUrl.trim() || !canAfford(getTokenCost('add_carousel'))}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-700 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium transition-colors shrink-0 shadow-glass-sm"
-                      >
-                        {isAddingCarouselByLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                        Добавить
-                        <TokenBadge tokens={getTokenCost('add_carousel')} />
-                      </button>
+                            const cost = getTokenCost('add_carousel');
+                            if (!canAfford(cost)) {
+                              toast.error('Недостаточно коинов');
+                              return;
+                            }
+                            setIsAddingCarouselByLink(true);
+                            try {
+                              const res = await fetch('/api/reel-info', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ url, source: 'carousel' }),
+                              });
+                              const data = await res.json();
+                              if (data.success && data.is_carousel && Array.isArray(data.carousel_slides) && data.carousel_slides.length > 0) {
+                                const added = await addCarousel({
+                                  shortcode: data.shortcode,
+                                  url: data.url,
+                                  caption: data.caption,
+                                  owner_username: data.owner?.username,
+                                  like_count: data.like_count,
+                                  comment_count: data.comment_count,
+                                  taken_at: data.taken_at,
+                                  slide_count: data.slide_count ?? data.carousel_slides.length,
+                                  thumbnail_url: data.thumbnail_url ?? data.carousel_slides[0],
+                                  slide_urls: data.carousel_slides,
+                                  folder_id: carouselAddToFolderId,
+                                });
+                                if (added) {
+                                  await deduct(cost);
+                                  setCarouselLinkUrl('');
+                                  toast.success('Карусель добавлена');
+                                }
+                              } else if (data.success && !data.is_carousel) {
+                                toast.error('Это не карусель - один пост. Добавляй посты с несколькими фото.');
+                              } else {
+                                toast.error(data.error || 'Не удалось загрузить пост. Проверьте ссылку.');
+                              }
+                            } catch (e) {
+                              toast.error('Ошибка при добавлении карусели');
+                            } finally {
+                              setIsAddingCarouselByLink(false);
+                            }
+                          }}
+                          disabled={isAddingCarouselByLink || !carouselLinkUrl.trim() || !canAfford(getTokenCost('add_carousel'))}
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-l-2xl bg-slate-700 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-medium transition-colors shrink-0"
+                        >
+                          {isAddingCarouselByLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                          Добавить
+                          <TokenBadge tokens={getTokenCost('add_carousel')} />
+                        </button>
+                        <div className="relative group">
+                          <select
+                            value={carouselAddToFolderId ?? ''}
+                            onChange={e => setCarouselAddToFolderId(e.target.value || null)}
+                            className="h-full pl-3 pr-8 py-2.5 bg-white/90 border-l border-white/60 text-slate-700 text-sm font-medium cursor-pointer appearance-none focus:outline-none min-w-[100px]"
+                            title="Папка для новой карусели"
+                          >
+                            <option value="">Без папки</option>
+                            {carouselFolderConfigs.map(f => (
+                              <option key={f.id ?? ''} value={f.id ?? ''}>{f.title}</option>
+                            ))}
+                          </select>
+                          <FolderOpen className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" strokeWidth={2.5} />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2058,6 +2113,110 @@ export function Workspace(_props?: WorkspaceProps) {
                   {descriptionModalText || 'Нет описания'}
                 </p>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Add Manual Video Modal — сценарий без ссылки */}
+      {showAddManualModal && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={() => !isAddingManual && setShowAddManualModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-manual-modal-title"
+        >
+          <div
+            className="relative z-10 bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] flex flex-col border border-slate-200 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
+              <h3 id="add-manual-modal-title" className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <PenLine className="w-5 h-5 text-slate-600" />
+                Сценарий без ссылки
+              </h3>
+              <button
+                onClick={() => !isAddingManual && setShowAddManualModal(false)}
+                disabled={isAddingManual}
+                className="p-2 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-50"
+                aria-label="Закрыть"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Название / идея</label>
+                <input
+                  type="text"
+                  value={manualTitle}
+                  onChange={e => setManualTitle(e.target.value)}
+                  placeholder="Кратко, о чём видео"
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/70 focus:border-slate-300"
+                  disabled={isAddingManual}
+                />
+              </div>
+              <div className="flex-1 min-h-0 flex flex-col">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Сценарий</label>
+                <textarea
+                  value={manualScript}
+                  onChange={e => setManualScript(e.target.value)}
+                  placeholder="Опиши сюжет, текст, идеи..."
+                  rows={6}
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200/70 focus:border-slate-300 resize-none"
+                  disabled={isAddingManual}
+                />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="text-sm font-medium text-slate-700">Папка:</label>
+                <select
+                  value={reelAddToFolderId ?? ''}
+                  onChange={e => setReelAddToFolderId(e.target.value || null)}
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm"
+                  disabled={isAddingManual}
+                >
+                  <option value="">Без папки</option>
+                  {folderConfigs.map(f => (
+                    <option key={f.id ?? ''} value={f.id ?? ''}>{f.title}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={async () => {
+                  const title = (manualTitle || manualScript || 'Новый сценарий').trim().slice(0, 500);
+                  const script = manualScript.trim().slice(0, 10000);
+                  if (!title) {
+                    toast.error('Введи название или сценарий');
+                    return;
+                  }
+                  setIsAddingManual(true);
+                  try {
+                    const savedVideo = await addVideoToInbox({
+                      title,
+                      script_text: script || undefined,
+                      isManual: true,
+                      projectId: currentProjectId || undefined,
+                      folderId: reelAddToFolderId || undefined,
+                    });
+                    if (savedVideo) {
+                      setShowAddManualModal(false);
+                      setManualTitle('');
+                      setManualScript('');
+                      toast.success('Сценарий добавлен');
+                    }
+                  } catch (e) {
+                    toast.error('Ошибка при добавлении');
+                  } finally {
+                    setIsAddingManual(false);
+                  }
+                }}
+                disabled={isAddingManual || (!manualTitle.trim() && !manualScript.trim())}
+                className="w-full py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                {isAddingManual ? <Loader2 className="w-4 h-4 animate-spin" /> : <PenLine className="w-4 h-4" />}
+                Добавить
+              </button>
             </div>
           </div>
         </div>,

@@ -166,6 +166,8 @@ export function useCarousels() {
     thumbnail_url?: string;
     /** URL всех слайдов (для транскрибации и превью) */
     slide_urls?: string[] | null;
+    /** Папка, в которую добавить карусель */
+    folder_id?: string | null;
   }) => {
     const userId = getUserId();
     const targetProjectId = currentProjectId ?? null;
@@ -175,6 +177,7 @@ export function useCarousels() {
         .insert({
           user_id: userId,
           project_id: targetProjectId,
+          folder_id: payload.folder_id ?? null,
           shortcode: payload.shortcode,
           url: payload.url || `https://www.instagram.com/p/${payload.shortcode}/`,
           caption: payload.caption ?? null,

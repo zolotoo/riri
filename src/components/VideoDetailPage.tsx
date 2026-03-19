@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
   ChevronLeft, Play, Eye, Heart, MessageCircle, Calendar, 
   Sparkles, FileText, Copy, ExternalLink, Loader2, Check,
-  Languages, ChevronDown, Mic, Save, RefreshCw, Plus, Trash2, Wand2, BookOpen, Pencil, Radar, X, Link2, Film
+  Languages, ChevronDown, Mic, Save, RefreshCw, Plus, Trash2, Wand2, BookOpen, Pencil, Radar, X, Link2, Film, PenLine
 } from 'lucide-react';
 import { AnimatedCopyIcon } from './ui/animated-state-icons';
 import { cn } from '../utils/cn';
@@ -53,6 +53,7 @@ interface VideoData {
   storage_video_url?: string;
   folder_id?: string;
   shortcode?: string | null;
+  is_manual?: boolean;
   draft_link?: string;
   final_link?: string;
   script_responsible?: string;
@@ -1087,9 +1088,9 @@ export function VideoDetailPage({ video, onBack, onRefreshData }: VideoDetailPag
               </h1>
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-neutral-500 text-sm">
-                  @{video.owner_username || 'instagram'}
+                  {video.is_manual ? '✏️ Сценарий без ссылки' : `@${video.owner_username || 'instagram'}`}
                 </p>
-                {video.owner_username && video.owner_username.toLowerCase() !== 'instagram' && currentProjectId && (() => {
+                {!video.is_manual && video.owner_username && video.owner_username.toLowerCase() !== 'instagram' && currentProjectId && (() => {
                   const isInRadar = radarProfiles.some(p => p.username.toLowerCase() === video.owner_username!.toLowerCase());
                   return (
                     <button
@@ -1171,13 +1172,25 @@ export function VideoDetailPage({ video, onBack, onRefreshData }: VideoDetailPag
         <div className="flex flex-col md:flex-row md:flex-1 gap-4 md:min-h-0 md:overflow-hidden">
           {/* Left: видео 9:16 + папка + статистика */}
           <div className="flex-shrink-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light w-full md:w-auto md:min-w-[256px] md:max-w-[min(256px,28vw)]">
-            {/* Видео 9:16 — выше по центру колонки. Заглушка: клик → загрузка через API (стоит кредитов) */}
+            {/* Видео 9:16 — для ручных видео показываем placeholder сценария */}
             <div className="flex justify-center flex-shrink-0">
               <div 
                 className="relative rounded-2xl overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.18)] border border-white/65 bg-black"
                 style={{ aspectRatio: '9/16', width: 'min(100%, 220px)' }}
               >
-              {showVideo && directVideoUrl && !videoLoadError ? (
+              {video.is_manual ? (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center p-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(148,163,184,0.35) 0%, rgba(100,116,139,0.45) 40%, rgba(71,85,105,0.5) 70%, rgba(51,65,85,0.55) 100%)',
+                  }}
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-white/25 flex items-center justify-center mb-2">
+                    <PenLine className="w-6 h-6 text-white" strokeWidth={2} />
+                  </div>
+                  <span className="text-white/90 text-xs font-medium text-center">Сценарий без ссылки</span>
+                </div>
+              ) : showVideo && directVideoUrl && !videoLoadError ? (
                 <video
                   src={proxyVideoUrl(directVideoUrl) || directVideoUrl}
                   className="w-full h-full object-cover"
@@ -1395,7 +1408,8 @@ export function VideoDetailPage({ video, onBack, onRefreshData }: VideoDetailPag
               </div>
             </div>
 
-            {/* Actions */}
+            {/* Actions — скрываем "Открыть" для ручных видео */}
+            {!video.is_manual && video.url && (
             <a
               href={video.url}
               target="_blank"
@@ -1405,6 +1419,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData }: VideoDetailPag
               <ExternalLink className="w-4 h-4" />
               Открыть в Instagram
             </a>
+            )}
             
             {/* Links section — динамические пункты с переименованием и добавлением */}
             <div className="rounded-card-xl p-3 shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] space-y-3">

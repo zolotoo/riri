@@ -43,6 +43,7 @@ export interface ZoneVideo {
   final_link?: string;
   links?: { label: string; value: string }[];
   responsibles?: { label: string; value: string }[];
+  is_manual?: boolean;
 }
 
 // Дефолтные зоны

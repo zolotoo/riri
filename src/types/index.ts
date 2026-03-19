@@ -42,6 +42,8 @@ export interface IncomingVideo {
   previewUrl: string;
   url: string;
   receivedAt: Date;
+  /** Ручное видео без ссылки (сценарий) */
+  is_manual?: boolean;
 }
 
 export interface FlowState {

@@ -37,6 +37,8 @@ interface SavedVideo {
   // Проекты
   project_id?: string;
   folder_id?: string;
+  // Ручное видео (без ссылки)
+  is_manual?: boolean;
   // Ссылки (legacy)
   draft_link?: string;
   final_link?: string;
@@ -106,6 +108,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
   // Преобразование из БД в IncomingVideo
   const transformVideo = useCallback((video: SavedVideo): IncomingVideo & { 
     shortcode?: string;
+    is_manual?: boolean;
     view_count?: number; 
     like_count?: number; 
     comment_count?: number;
@@ -147,12 +150,14 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
           { label: 'За сценарий', value: video.script_responsible || '' },
           { label: 'За монтаж', value: video.editing_responsible || '' },
         ];
+    const isManual = !!(video as any).is_manual;
     return {
       id: video.id,
       title: video.caption || 'Без названия',
       previewUrl: video.thumbnail_url || '',
-      url: video.video_url || `https://instagram.com/reel/${video.shortcode}`,
+      url: isManual ? '' : (video.video_url || (video.shortcode ? `https://instagram.com/reel/${video.shortcode}` : '')),
       shortcode: video.shortcode,
+      is_manual: isManual,
       receivedAt: new Date(video.added_at),
       view_count: video.view_count,
       like_count: video.like_count,
@@ -461,8 +466,8 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
    */
   const addVideoToInbox = useCallback(async (video: {
     title: string;
-    previewUrl: string;
-    url: string;
+    previewUrl?: string;
+    url?: string;
     viewCount?: number;
     likeCount?: number;
     commentCount?: number;
@@ -472,15 +477,21 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     projectId?: string;
     folderId?: string;
     takenAt?: string | number;
+    /** Ручное видео без ссылки — только сценарий */
+    isManual?: boolean;
+    /** Текст сценария (для ручных видео) */
+    script_text?: string;
   }): Promise<AddVideoResult> => {
     const userId = getUserId();
+    const isManual = !!video.isManual;
+    const url = video.url ?? '';
     
     // Используем currentProjectId из контекста, если projectId не передан явно
     const targetProjectId = video.projectId !== undefined ? video.projectId : currentProjectId || null;
     
-    // Извлекаем shortcode из URL если его нет
-    const shortcode = video.shortcode || extractShortcode(video.url) || undefined;
-    const videoId = video.videoId || shortcode || `video-${Date.now()}`;
+    // Извлекаем shortcode из URL если его нет (для ручных видео — null)
+    const shortcode = isManual ? undefined : (video.shortcode || extractShortcode(url) || undefined);
+    const videoId = video.videoId || shortcode || (isManual ? `manual-${Date.now()}` : `video-${Date.now()}`);
     
     console.log('[InboxVideos] Adding video:', { 
       userId, 
@@ -488,12 +499,13 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
       shortcode,
       projectId: targetProjectId, 
       folderId: video.folderId,
-      url: video.url 
+      url,
+      isManual,
     });
 
     let existingUserVideos: Awaited<ReturnType<typeof findExistingSavedVideos>> = [];
     let shouldCreateCopy = false;
-    if (shortcode) {
+    if (shortcode && !isManual) {
       existingUserVideos = await findExistingSavedVideos(shortcode, targetProjectId, userId);
 
       if (existingUserVideos.length > 0) {
@@ -529,15 +541,15 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     }
     
     // Пытаемся сохранить превью в Supabase Storage (постоянный URL вместо истекающего Instagram)
-    let thumbnailToSave = video.previewUrl;
-    // Если превью пустое — пробуем получить через reel-info (API мог вернуть другой формат)
+    // Для ручных видео — previewUrl опционален, оставляем пустым или как передан
+    let thumbnailToSave = video.previewUrl ?? '';
     let reelInfoVideoUrl: string | undefined;
-    if (!thumbnailToSave && shortcode) {
+    if (!isManual && !thumbnailToSave && shortcode) {
       try {
         const infoRes = await fetch('/api/reel-info', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shortcode, url: video.url, source: 'lenta' }),
+          body: JSON.stringify({ shortcode, url, source: 'lenta' }),
         });
         const infoData = await infoRes.json();
         thumbnailToSave = infoData?.thumbnail_url || infoData?.carousel_slides?.[0] || '';
@@ -546,7 +558,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         /* ignore */
       }
     }
-    if (shortcode && thumbnailToSave && !thumbnailToSave.includes('supabase')) {
+    if (!isManual && shortcode && thumbnailToSave && !thumbnailToSave.includes('supabase')) {
       try {
         const res = await fetch('/api/save-media', {
           method: 'POST',
@@ -558,11 +570,10 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
           thumbnailToSave = data.storageUrl;
         }
       } catch {
-        // Используем оригинальный URL при ошибке
+        /* ignore */
       }
     }
-    // Сохраняем видео в Supabase Storage в фоне (снижает Fast Origin Transfer при просмотре)
-    if (shortcode && reelInfoVideoUrl) {
+    if (!isManual && shortcode && reelInfoVideoUrl) {
       fetch('/api/save-media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -581,6 +592,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
       comment_count?: number;
       owner_username?: string;
       taken_at?: number;
+      is_manual?: boolean;
     }) | null = null;
 
     if (existingUserVideos.length === 0 || shouldCreateCopy) {
@@ -588,7 +600,8 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         id: `local-${Date.now()}`,
         title: video.title,
         previewUrl: thumbnailToSave,
-        url: video.url,
+        url,
+        is_manual: isManual,
         receivedAt: new Date(),
         view_count: video.viewCount,
         like_count: video.likeCount,
@@ -598,24 +611,22 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
       };
 
       // Оптимистичное обновление UI только для новых видео
-      setVideos(prev => [localVideo!, ...prev]);
-      setIncomingVideos([localVideo, ...useFlowStore.getState().incomingVideos]);
+      setVideos(prev => [localVideo as IncomingVideo, ...prev]);
+      setIncomingVideos([localVideo as IncomingVideo, ...useFlowStore.getState().incomingVideos]);
     }
 
     try {
-      // 1. СНАЧАЛА проверяем/создаём видео в ГЛОБАЛЬНОЙ таблице videos
+      // 1. СНАЧАЛА проверяем/создаём видео в ГЛОБАЛЬНОЙ таблице videos (только для видео по ссылке)
       let globalVideo = null;
       let existingTranscription = null;
       
-      if (shortcode) {
-        // Проверяем есть ли уже транскрибация
+      if (shortcode && !isManual) {
         existingTranscription = await getTranscriptionByShortcode(shortcode);
         console.log('[InboxVideos] Existing transcription check:', existingTranscription);
         
-        // Получаем или создаём глобальное видео
         globalVideo = await getOrCreateGlobalVideo({
           shortcode,
-          url: video.url,
+          url,
           thumbnailUrl: thumbnailToSave,
           caption: video.title,
           ownerUsername: video.ownerUsername,
@@ -633,8 +644,10 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
 
       const baseVideoData: Record<string, unknown> = {
         thumbnail_url: thumbnailToSave,
-        video_url: video.url,
+        video_url: isManual ? null : url,
         caption: video.title,
+        is_manual: isManual,
+        ...(video.script_text !== undefined && { script_text: video.script_text }),
         owner_username: video.ownerUsername,
         view_count: video.viewCount,
         like_count: video.likeCount,
@@ -650,13 +663,13 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         console.log('[InboxVideos] Copying transcription from global DB');
       }
 
-      if (existingUserVideos.length > 0) {
+      if (existingUserVideos.length > 0 && shortcode) {
         console.log('[InboxVideos] Duplicate found, updating existing videos:', existingUserVideos.length);
 
         let updateQuery = supabase
           .from('saved_videos')
           .update(baseVideoData)
-          .eq('shortcode', shortcode!)
+          .eq('shortcode', shortcode)
           .eq('user_id', userId);
 
         if (targetProjectId) {
@@ -679,7 +692,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         const insertData: Record<string, unknown> = {
           user_id: userId,
           video_id: shouldCreateCopy ? `${videoId}-${Date.now()}` : videoId,
-          shortcode: shortcode,
+          shortcode: shortcode ?? null,
           ...baseVideoData,
         };
 
