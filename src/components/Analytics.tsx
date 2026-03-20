@@ -16,8 +16,8 @@ import { cn } from '../utils/cn';
 import { proxyImageUrl, PLACEHOLDER_270x360 } from '../utils/imagePlaceholder';
 import {
   BarChart2, RefreshCw, Instagram, Eye, Heart, MessageCircle,
-  Award, Film, X, CalendarDays, Calendar,
-  ArrowUpRight, ArrowDownRight, Minus, Mic, Sparkles,
+  Award, Film, X, CalendarDays, Calendar, AlertCircle,
+  ArrowUpRight, ArrowDownRight, Mic, Sparkles,
   LayoutGrid, List, Clock, ChevronRight, ChevronLeft, Users, Link2, Unlink, UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -463,7 +463,7 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
   const { addVideoToInbox, updateVideoShortcode, updateVideoResponsible } = useInboxVideos();
   const { currentProject } = useProjectContext();
   const folderIds = (currentProject?.folders ?? []).map(f => f.id);
-  const { refs, refsWithoutShortcode, refetch: refetchRefs } = useRefsForLinking(currentProject?.id ?? null, folderIds);
+  const { refs, refetch: refetchRefs } = useRefsForLinking(currentProject?.id ?? null, folderIds);
   const participants = useParticipantsForResponsibles(currentProject?.id ?? null);
   const rolesTemplate = (currentProject?.responsiblesTemplate ?? [{ id: 'resp-0', label: 'За сценарий' }, { id: 'resp-1', label: 'За монтаж' }]) as { id: string; label: string }[];
   const [showResponsiblePicker, setShowResponsiblePicker] = useState(false);
@@ -511,6 +511,23 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
   const views = latestSnap?.view_count ?? reel.latest_view_count ?? 0;
   const likes = latestSnap?.like_count ?? reel.latest_like_count ?? 0;
   const comments = latestSnap?.comment_count ?? reel.latest_comment_count ?? 0;
+  const folders = currentProject?.folders || [];
+
+  // Группируем refs по папкам для ref-picker
+  const refsByFolder = useMemo(() => {
+    const groups: { folderId: string | null; folderName: string; refs: typeof refs }[] = [];
+    const folderMap = new Map(folders.map(f => [f.id, f.name]));
+    const seen = new Set<string | null>();
+    const allFolderIds = [null, ...folders.map(f => f.id)];
+    for (const fId of allFolderIds) {
+      const group = refs.filter(r => (r.folder_id ?? null) === fId);
+      if (group.length > 0 && !seen.has(fId)) {
+        seen.add(fId);
+        groups.push({ folderId: fId, folderName: fId ? (folderMap.get(fId) ?? 'Папка') : 'Без папки', refs: group });
+      }
+    }
+    return groups;
+  }, [refs, folders]);
   const instagramUrl = `https://www.instagram.com/reel/${reel.shortcode}/`;
 
   const handleTranscribe = async () => {
@@ -547,138 +564,128 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
     toast.success('Скопировано в ленту');
   };
 
-  const folders = currentProject?.folders || [];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-[8px]"
-        onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-      <motion.div
-        className="relative w-full max-w-lg mx-0 md:mx-4 max-h-[92vh] flex flex-col rounded-t-[28px] md:rounded-[28px] shadow-2xl safe-bottom overflow-hidden"
-        style={{ background: 'rgba(248,248,252,0.96)', backdropFilter: 'blur(32px) saturate(200%)' }}
-        initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 30 }}
-      >
-        {/* Hero thumbnail — портретный кроп, iOS 26 glass overlay */}
-        <div className="relative w-full flex-shrink-0 overflow-hidden" style={{ height: '260px' }}>
-          {/* Размытый фон-заглушка */}
-          <div className="absolute inset-0 bg-slate-800" />
-          {reel.thumbnail_url ? (
-            <img
-              src={proxyImageUrl(reel.thumbnail_url ?? undefined)}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover object-top"
-              onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
-              <Film className="w-12 h-12 text-slate-500" />
-            </div>
-          )}
-          {/* Градиентный оверлей как в VideoGradientCard */}
-          <div className="absolute inset-0 pointer-events-none" style={{
-            background: `linear-gradient(to top, rgba(9,11,18,0.92) 0%, rgba(20,24,34,0.60) 32%, rgba(32,36,44,0.22) 60%, rgba(255,255,255,0.04) 100%)`
-          }} />
-          <div className="absolute inset-x-0 top-0 h-20 pointer-events-none bg-gradient-to-b from-black/25 via-black/6 to-transparent" />
-
-          {/* Верх: кнопка Instagram + закрыть */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-            <a
-              href={instagramUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white/90 text-[11px] font-semibold backdrop-blur-md border border-white/20 touch-manipulation"
-              style={{ background: 'rgba(0,0,0,0.38)' }}
-              onClick={e => e.stopPropagation()}
-            >
-              <Instagram className="w-3.5 h-3.5" />
-              Открыть в Instagram
-            </a>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 text-white/90 touch-manipulation"
-              style={{ background: 'rgba(0,0,0,0.38)' }}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Низ: стеклянные пилюли со статами + заголовок */}
-          <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-10">
-            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              {views > 0 && (
-                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
-                  <Eye className="w-2.5 h-2.5 text-white/85 flex-shrink-0" strokeWidth={2} />
-                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(views)}</span>
-                </div>
-              )}
-              {likes > 0 && (
-                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
-                  <Heart className="w-2.5 h-2.5 text-rose-300 flex-shrink-0" strokeWidth={2} />
-                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(likes)}</span>
-                </div>
-              )}
-              {comments > 0 && (
-                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
-                  <MessageCircle className="w-2.5 h-2.5 text-emerald-300 flex-shrink-0" strokeWidth={2} />
-                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(comments)}</span>
-                </div>
-              )}
-              {takenAt && (
-                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
-                  <Calendar className="w-2.5 h-2.5 text-white/70 flex-shrink-0" strokeWidth={2} />
-                  <span className="text-[11px] font-semibold text-white/90">{takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
-                </div>
-              )}
-            </div>
-            <p className="text-white font-semibold text-[14px] leading-snug line-clamp-2 drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
-              {reel.caption ? reel.caption.slice(0, 90) + (reel.caption.length > 90 ? '…' : '') : 'Без подписи'}
+    <motion.div
+      className="fixed inset-0 z-50 flex flex-col bg-[#f0f0f5]"
+      style={{ willChange: 'transform' }}
+      initial={{ opacity: 0, x: 40 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 40 }}
+      transition={{ type: 'spring', stiffness: 340, damping: 34 }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0 bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-[0_1px_0_rgba(15,23,42,0.06)]">
+        <button
+          onClick={onClose}
+          className="w-9 h-9 flex items-center justify-center rounded-2xl bg-white/80 border border-white/60 shadow-sm text-slate-600 hover:bg-white transition-colors touch-manipulation"
+        >
+          <ChevronLeft className="w-4.5 h-4.5" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[15px] font-semibold text-slate-800 truncate">
+            {reel.caption ? reel.caption.slice(0, 60) + (reel.caption.length > 60 ? '…' : '') : 'Ролик из аналитики'}
+          </h2>
+          {takenAt && (
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
-          </div>
+          )}
         </div>
+        <a
+          href={instagramUrl} target="_blank" rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="w-9 h-9 flex items-center justify-center rounded-2xl bg-white/80 border border-white/60 shadow-sm text-slate-600 hover:bg-white transition-colors touch-manipulation"
+        >
+          <Instagram className="w-4 h-4" />
+        </a>
+      </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {/* Stats row — iOS 26 glass cards */}
-          <div className="flex items-stretch gap-2 px-4 pt-4 pb-0">
-            {[
-              { icon: <Eye className="w-3.5 h-3.5" />, value: views, delta: viewsDelta, label: 'просмотров', color: '#6366f1' },
-              { icon: <Heart className="w-3.5 h-3.5" />, value: likes, label: 'лайков', color: '#f43f5e' },
-              { icon: <MessageCircle className="w-3.5 h-3.5" />, value: comments, label: 'коммент.', color: '#10b981' },
-            ].map(s => (
-              <div key={s.label} className="flex-1 rounded-2xl px-3 py-3 flex flex-col gap-1 bg-white/72 backdrop-blur-sm border border-white/80 shadow-[0_2px_12px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.85)]">
-                <div className="flex items-center gap-1.5">
-                  <span style={{ color: s.color }}>{s.icon}</span>
-                  <p className="text-[10px] text-slate-400 font-medium leading-none">{s.label}</p>
+      {/* Main 3-column content */}
+      <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row gap-4 p-4 pb-8 md:pb-4">
+
+        {/* ── Left column: thumbnail + stats + actions ── */}
+        <div className="flex-shrink-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light w-full md:w-auto md:min-w-[256px] md:max-w-[256px]">
+
+          {/* Thumbnail 9:16 */}
+          <div className="flex justify-center flex-shrink-0">
+            <div
+              className="relative rounded-2xl overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.18)] border border-white/65 bg-black"
+              style={{ aspectRatio: '9/16', width: 'min(100%, 220px)' }}
+            >
+              {reel.thumbnail_url ? (
+                <img
+                  src={proxyImageUrl(reel.thumbnail_url ?? undefined)}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover object-top"
+                  onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+                  <Film className="w-10 h-10 text-slate-500" />
                 </div>
-                <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(s.value)}</p>
-                {s.delta != null && (
-                  <p className={cn('text-[10px] font-semibold flex items-center gap-0.5', s.delta > 0 ? 'text-emerald-500' : s.delta < 0 ? 'text-rose-500' : 'text-slate-400')}>
-                    {s.delta > 0 ? <ArrowUpRight className="w-3 h-3" /> : s.delta < 0 ? <ArrowDownRight className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                    {s.delta !== 0 ? fmt(Math.abs(s.delta)) : '—'}
-                  </p>
-                )}
-              </div>
-            ))}
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+            </div>
           </div>
 
-          <div className="px-4 pt-3 space-y-3 pb-6">
-            {/* Action buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={handleTranscribe} disabled={transcribing || !reel.video_url}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[13px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 transition-all touch-manipulation"
-              >
-                {transcribing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
-                {transcribing ? 'Транскрибирую…' : 'Транскрибировать'}
-              </button>
-              <button
-                onClick={() => setShowFolderPicker(true)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                В папку
-              </button>
+          {/* Stats card 2×2 */}
+          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                <div>
+                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(views)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">просмотров</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <div>
+                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(likes)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">лайков</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <div>
+                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(comments)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">коммент.</p>
+                </div>
+              </div>
+              {takenAt && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-700 leading-none">{takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{takenAt.getFullYear()}</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Folder picker */}
+            {/* Дельта просмотров */}
+            {viewsDelta != null && viewsDelta !== 0 && (
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100">
+                {viewsDelta > 0
+                  ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500" />
+                  : <ArrowDownRight className="w-3.5 h-3.5 text-rose-500" />}
+                <span className={cn('text-[12px] font-semibold', viewsDelta > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                  {viewsDelta > 0 ? '+' : ''}{fmt(viewsDelta)}
+                </span>
+                <span className="text-[10px] text-slate-400">с прошлого обновления</span>
+              </div>
+            )}
+          </div>
+
+          {/* В папку */}
+          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3 space-y-2">
+            <button
+              onClick={() => setShowFolderPicker(v => !v)}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              В папку
+            </button>
             <AnimatePresence>
               {showFolderPicker && (
                 <motion.div
@@ -686,19 +693,19 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                   exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
                   className="overflow-hidden"
                 >
-                  <div className="bg-slate-50 rounded-2xl p-3 space-y-1.5">
-                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1 mb-2">Выбери папку</p>
+                  <div className="pt-1 space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1.5">Выбери папку</p>
                     <button
                       onClick={() => handleCopyToFolder(null)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
+                      className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
                     >
-                      📥 Все видео (без папки)
+                      📥 Без папки
                     </button>
                     {folders.map((f: { id: string; name: string }) => (
                       <button
                         key={f.id}
                         onClick={() => handleCopyToFolder(f.id)}
-                        className="w-full text-left px-3 py-2.5 rounded-xl bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
+                        className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
                       >
                         📁 {f.name}
                       </button>
@@ -713,193 +720,251 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                 </motion.div>
               )}
             </AnimatePresence>
+          </div>
 
-            {/* Привязка к исходнику из папки (для аналитики по ответственным) */}
-            {currentProject && (
-              <div className="bg-slate-50 rounded-2xl p-3 space-y-2">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1">Исходник из папки</p>
-                {linkedRef ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200/70">
-                      <span className="text-[13px] text-slate-700 truncate flex-1">
-                        {linkedRef.caption?.slice(0, 50) || 'Исходник без названия'}
-                        {(linkedRef.caption?.length ?? 0) > 50 ? '…' : ''}
-                      </span>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setShowResponsiblePicker(true)}
-                          className="p-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-600 touch-manipulation flex items-center gap-1.5 shadow-sm min-h-[40px]"
-                          title="Выбрать ответственного"
-                        >
-                          <UserPlus className="w-4 h-4" />
-                          <span className="text-[12px] font-semibold">Ответственный</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleUnlinkRef}
-                          className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 touch-manipulation"
-                          title="Отвязать исходник"
-                        >
-                          <Unlink className="w-4 h-4" />
-                        </button>
-                      </div>
+          {/* Исходник из папки */}
+          {currentProject && (
+            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3 space-y-2">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1">Исходник из папки</p>
+              {linkedRef ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/60">
+                    <span className="text-[13px] text-slate-700 truncate flex-1">
+                      {linkedRef.caption?.slice(0, 50) || 'Исходник без названия'}
+                      {(linkedRef.caption?.length ?? 0) > 50 ? '…' : ''}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowResponsiblePicker(true)}
+                        className="p-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-600 touch-manipulation flex items-center gap-1.5 shadow-sm min-h-[40px]"
+                        title="Выбрать ответственного"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        <span className="text-[12px] font-semibold">Ответственный</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUnlinkRef}
+                        className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 touch-manipulation"
+                        title="Отвязать исходник"
+                      >
+                        <Unlink className="w-4 h-4" />
+                      </button>
                     </div>
-                    {linkedRef.responsibles?.length ? (
-                      <p className="text-[11px] text-slate-500 px-1">
-                        {linkedRef.responsibles.map(r => `${r.label}: ${r.value}`).join(', ')}
-                      </p>
-                    ) : null}
                   </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setShowRefPicker(!showRefPicker)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
-                    >
-                      <Link2 className="w-3.5 h-3.5" />
-                      Привязать к исходнику из папки
-                    </button>
-                    <AnimatePresence>
-                      {showRefPicker && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar-light">
-                            {refs.length === 0 ? (
-                              <p className="text-[12px] text-slate-500 px-2 py-2">Нет видео в проекте. Добавь видео в папки в разделе «Лента».</p>
-                            ) : (
-                              refs.map((ref) => {
-                                const alreadyLinked = ref.shortcode && ref.shortcode !== reel.shortcode;
-                                return (
-                                  <button
-                                    key={ref.id}
-                                    type="button"
-                                    onClick={() => handleLinkRef(ref.id)}
-                                    className="w-full text-left px-3 py-2 rounded-xl bg-white text-[13px] text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation flex items-center gap-2"
-                                  >
-                                    {ref.thumbnail_url ? (
-                                      <img
-                                        src={proxyImageUrl(ref.thumbnail_url ?? undefined)}
-                                        alt=""
-                                        className="w-9 h-12 rounded-lg object-cover shrink-0"
-                                        onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
-                                      />
-                                    ) : (
-                                      <div className="w-9 h-12 rounded-lg bg-slate-200 shrink-0 flex items-center justify-center">
-                                        <Film className="w-4 h-4 text-slate-400" />
-                                      </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="truncate text-[13px] text-slate-700 font-medium">{ref.caption?.slice(0, 40) || 'Без названия'}{(ref.caption?.length ?? 0) > 40 ? '…' : ''}</p>
-                                      {alreadyLinked && (
-                                        <p className="text-[10px] text-amber-500 mt-0.5">Уже привязан к другому ролику</p>
-                                      )}
-                                      {ref.shortcode === reel.shortcode && (
-                                        <p className="text-[10px] text-emerald-500 mt-0.5">Уже привязан к этому ролику</p>
-                                      )}
-                                    </div>
-                                  </button>
-                                );
-                              })
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setShowRefPicker(false)}
-                              className="w-full text-center py-2 text-[12px] text-slate-400 hover:text-slate-600 touch-manipulation"
-                            >
-                              Отмена
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </div>
-            )}
+                  {linkedRef.responsibles?.length ? (
+                    <p className="text-[11px] text-slate-500 px-1">
+                      {linkedRef.responsibles.map(r => `${r.label}: ${r.value}`).join(', ')}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowRefPicker(true)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  Привязать к исходнику
+                </button>
+              )}
+            </div>
+          )}
 
-            {showResponsiblePicker && linkedRef && (
-              <ResponsiblePickerModal
-                isOpen
-                onClose={() => setShowResponsiblePicker(false)}
-                refId={linkedRef.id}
-                refCaption={linkedRef.caption ?? undefined}
-                roles={rolesTemplate}
-                participants={participants}
-                currentResponsibles={linkedRef.responsibles ?? []}
-                onSave={(items) => handleSaveResponsibleReel(linkedRef.id, items)}
-              />
-            )}
+          {showResponsiblePicker && linkedRef && (
+            <ResponsiblePickerModal
+              isOpen
+              onClose={() => setShowResponsiblePicker(false)}
+              refId={linkedRef.id}
+              refCaption={linkedRef.caption ?? undefined}
+              roles={rolesTemplate}
+              participants={participants}
+              currentResponsibles={linkedRef.responsibles ?? []}
+              onSave={(items) => handleSaveResponsibleReel(linkedRef.id, items)}
+            />
+          )}
+        </div>
 
-            {/* Views chart */}
-            {chartData.length >= 2 ? (
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-[13px] font-semibold text-slate-700 mb-3">Динамика просмотров</p>
-                <AreaChart data={chartData} formatXLabel={(d) => formatChartDateLabel(d, 'day')} aspectRatio="3 / 1" margin={{ top: 12, right: 12, bottom: 28, left: 36 }}>
-                  <Grid horizontal numTicksRows={3} />
-                  <Area dataKey="views" fill="#6366f1" fillOpacity={0.18} stroke="#6366f1" strokeWidth={2} fadeEdges />
-                  <YAxis numTicks={3} formatValue={(v) => fmt(v as number)} />
-                  <XAxis numTicks={Math.min(chartData.length, 4)} />
-                  <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
-                </AreaChart>
-                <p className="text-[10px] text-slate-400 text-center mt-2">{reelSnaps.length} снимков данных</p>
-              </div>
+        {/* ── Center column: Transcription ── */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light">
+          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[13px] font-semibold text-slate-700">Транскрибация</p>
+            </div>
+            {transcript ? (
+              <p className="text-[13px] text-slate-600 leading-relaxed">{transcript}</p>
             ) : (
-              <div className="bg-slate-50 rounded-2xl px-4 py-3 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                  <BarChart2 className="w-4 h-4 text-indigo-300" />
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
+                  <Mic className="w-5 h-5 text-slate-400" />
                 </div>
-                <div>
-                  <p className="text-[13px] font-medium text-slate-600">
-                    {reelSnaps.length === 0 ? 'Нужно 2 обновления для динамики' : 'Ещё 1 обновление — и появится график'}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {reelSnaps.length === 0 ? 'Пока нет снимков данных' : `${reelSnaps.length}/2 снимков собрано`}
-                  </p>
-                </div>
+                <p className="text-[13px] text-slate-500 font-medium mb-1">Транскрибация недоступна</p>
+                <p className="text-[11px] text-slate-400">Для аналитики рилсов транскрибация в разработке</p>
               </div>
             )}
-
-            {/* Transcription result */}
-            {transcript && (
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-[13px] font-semibold text-slate-700 mb-2">Транскрибация</p>
-                <p className="text-[13px] text-slate-600 leading-relaxed max-h-36 overflow-y-auto">{transcript}</p>
-              </div>
-            )}
-
-            {/* Caption */}
-            {reel.caption && (
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[13px] font-semibold text-slate-700">Подпись</p>
-                  {reel.caption.length > 120 && (
-                    <button onClick={() => setCaptionExpanded(v => !v)} className="text-[11px] text-indigo-500 font-medium">
-                      {captionExpanded ? 'Свернуть' : 'Развернуть'}
-                    </button>
-                  )}
-                </div>
-                <p className={cn('text-[13px] text-slate-600 leading-relaxed', !captionExpanded && 'line-clamp-4')}>
-                  {reel.caption}
-                </p>
-              </div>
-            )}
-
-            {/* AI analyze */}
-            <button disabled className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-slate-200 text-slate-400 cursor-not-allowed">
-              <Sparkles className="w-4 h-4" />
-              <span className="text-[13px]">AI-анализ ролика — скоро</span>
+            <button
+              onClick={handleTranscribe} disabled={transcribing || !reel.video_url}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 transition-all touch-manipulation"
+            >
+              {transcribing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
+              {transcribing ? 'Транскрибирую…' : 'Транскрибировать'}
             </button>
           </div>
         </div>
-      </motion.div>
-    </div>
+
+        {/* ── Right column: chart + caption + AI ── */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light md:max-w-sm">
+
+          {/* Views chart */}
+          {chartData.length >= 2 ? (
+            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
+              <p className="text-[13px] font-semibold text-slate-700 mb-3">Динамика просмотров</p>
+              <AreaChart data={chartData} formatXLabel={(d) => formatChartDateLabel(d, 'day')} aspectRatio="2.5 / 1" margin={{ top: 12, right: 12, bottom: 28, left: 36 }}>
+                <Grid horizontal numTicksRows={3} />
+                <Area dataKey="views" fill="#6366f1" fillOpacity={0.18} stroke="#6366f1" strokeWidth={2} fadeEdges />
+                <YAxis numTicks={3} formatValue={(v) => fmt(v as number)} />
+                <XAxis numTicks={Math.min(chartData.length, 4)} />
+                <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
+              </AreaChart>
+              <p className="text-[10px] text-slate-400 text-center mt-2">{reelSnaps.length} снимков данных</p>
+            </div>
+          ) : (
+            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] px-4 py-5 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                <BarChart2 className="w-4.5 h-4.5 text-indigo-300" />
+              </div>
+              <div>
+                <p className="text-[13px] font-medium text-slate-600">
+                  {reelSnaps.length === 0 ? 'Нужно 2 обновления для динамики' : 'Ещё 1 обновление — и появится график'}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {reelSnaps.length === 0 ? 'Пока нет снимков данных' : `${reelSnaps.length}/2 снимков собрано`}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Caption */}
+          {reel.caption && (
+            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[13px] font-semibold text-slate-700">Подпись</p>
+                {reel.caption.length > 120 && (
+                  <button onClick={() => setCaptionExpanded(v => !v)} className="text-[11px] text-indigo-500 font-medium">
+                    {captionExpanded ? 'Свернуть' : 'Развернуть'}
+                  </button>
+                )}
+              </div>
+              <p className={cn('text-[13px] text-slate-600 leading-relaxed', !captionExpanded && 'line-clamp-4')}>
+                {reel.caption}
+              </p>
+            </div>
+          )}
+
+          {/* AI analyze */}
+          <button disabled className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-slate-200 text-slate-400 cursor-not-allowed bg-white/60">
+            <Sparkles className="w-4 h-4" />
+            <span className="text-[13px]">AI-анализ ролика — скоро</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Ref picker — full overlay */}
+      <AnimatePresence>
+        {showRefPicker && (
+          <motion.div
+            className="absolute inset-0 z-20 flex flex-col bg-[#f8f8fc]"
+            initial={{ opacity: 0, x: 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 32 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+          >
+            {/* Шапка */}
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100/80 flex-shrink-0 bg-white/70 backdrop-blur-xl">
+              <button
+                type="button"
+                onClick={() => setShowRefPicker(false)}
+                className="w-9 h-9 rounded-2xl bg-white/80 border border-white/60 shadow-sm flex items-center justify-center text-slate-600 transition-colors touch-manipulation"
+              >
+                <ChevronLeft className="w-4.5 h-4.5" />
+              </button>
+              <div className="flex-1">
+                <p className="text-[15px] font-semibold text-slate-800">Выбери исходник</p>
+                <p className="text-[11px] text-slate-400">Видео из папок проекта</p>
+              </div>
+            </div>
+
+            {/* Контент — папки с видео */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5 custom-scrollbar-light">
+              {refs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+                    <Film className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <p className="text-[14px] font-medium text-slate-600">Нет видео в проекте</p>
+                  <p className="text-[12px] text-slate-400 mt-1">Добавь видео в папки через раздел «Лента»</p>
+                </div>
+              ) : (
+                refsByFolder.map(group => (
+                  <div key={group.folderId ?? '__inbox'}>
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
+                      📁 {group.folderName}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {group.refs.map(ref => {
+                        const isLinked = ref.shortcode === reel.shortcode;
+                        const otherLinked = ref.shortcode && ref.shortcode !== reel.shortcode;
+                        return (
+                          <button
+                            key={ref.id}
+                            type="button"
+                            onClick={() => handleLinkRef(ref.id)}
+                            className={cn(
+                              'relative flex flex-col rounded-2xl overflow-hidden border-2 transition-all touch-manipulation text-left',
+                              isLinked
+                                ? 'border-emerald-400 ring-2 ring-emerald-200'
+                                : otherLinked
+                                  ? 'border-amber-300 opacity-70'
+                                  : 'border-transparent hover:border-indigo-300'
+                            )}
+                            style={{ aspectRatio: '9/16' }}
+                          >
+                            {ref.thumbnail_url ? (
+                              <img
+                                src={proxyImageUrl(ref.thumbnail_url ?? undefined)}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover"
+                                onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
+                              />
+                            ) : (
+                              <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+                                <Film className="w-5 h-5 text-slate-400" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 right-0 p-1.5">
+                              <p className="text-white text-[9px] font-medium leading-tight line-clamp-2">
+                                {ref.caption?.slice(0, 30) || 'Без названия'}
+                              </p>
+                            </div>
+                            {isLinked && (
+                              <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
+                                <Link2 className="w-2.5 h-2.5 text-white" />
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
