@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { useProjectAnalytics, type ProjectReel, type SyncCount } from '../hooks/useProjectAnalytics';
@@ -19,6 +20,7 @@ import {
   Award, Film, X, CalendarDays, Calendar, AlertCircle,
   ArrowUpRight, ArrowDownRight, Mic, Sparkles,
   LayoutGrid, List, Clock, ChevronRight, ChevronLeft, Users, Link2, Unlink, UserPlus,
+  FileText, Check, ChevronDown, Trophy, Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -449,10 +451,12 @@ function ReelCard({ reel, onClick, layout, avgBottom3Views }: {
 
 // ─── Reel Detail Modal ────────────────────────────────────────────────────────
 
-function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
+function ReelDetailModal({ reel, onClose, getReelSnapshots, allReels, avgBottom3Views }: {
   reel: ProjectReel;
   onClose: () => void;
   getReelSnapshots: (reelId: string) => ReturnType<typeof import('../hooks/useProjectAnalytics').useProjectAnalytics>['getReelSnapshots'] extends (id: string) => infer R ? R : never;
+  allReels: ProjectReel[];
+  avgBottom3Views: number;
 }) {
   const reelSnaps = getReelSnapshots(reel.id);
   const [transcribing, setTranscribing] = useState(false);
@@ -460,6 +464,13 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [showRefPicker, setShowRefPicker] = useState(false);
+  const [showRankingModal, setShowRankingModal] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const m = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
+    m(); window.addEventListener('resize', m);
+    return () => window.removeEventListener('resize', m);
+  }, []);
   const { addVideoToInbox, updateVideoShortcode, updateVideoResponsible } = useInboxVideos();
   const { currentProject } = useProjectContext();
   const folderIds = (currentProject?.folders ?? []).map(f => f.id);
@@ -528,6 +539,27 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
     }
     return groups;
   }, [refs, folders]);
+  const viralCoef = calcViralCoef(views, reel.taken_at ?? null);
+  const viralMult = calcViralMultiplier(views, avgBottom3Views);
+  const finalViralCoef = applyMultiplier(viralCoef, viralMult);
+
+  // Rankings среди всех роликов проекта
+  const sortedByViews = useMemo(() =>
+    [...allReels].sort((a, b) => (b.latest_view_count ?? 0) - (a.latest_view_count ?? 0)),
+    [allReels]
+  );
+  const sortedByComments = useMemo(() =>
+    [...allReels].sort((a, b) => (b.latest_comment_count ?? 0) - (a.latest_comment_count ?? 0)),
+    [allReels]
+  );
+  const rankByViews = sortedByViews.findIndex(r => r.id === reel.id) + 1;
+  const rankByComments = sortedByComments.findIndex(r => r.id === reel.id) + 1;
+
+  // Folder configs
+  const folderConfigs = (currentProject?.folders ?? [])
+    .slice().sort((a, b) => a.order - b.order)
+    .map(f => ({ id: f.id, title: f.name, color: f.color }));
+
   const instagramUrl = `https://www.instagram.com/reel/${reel.shortcode}/`;
 
   const handleTranscribe = async () => {
@@ -566,336 +598,448 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex flex-col bg-[#f0f0f5]"
+      className="fixed inset-0 z-50 flex flex-col bg-[#f5f6f8]"
       style={{ willChange: 'transform' }}
       initial={{ opacity: 0, x: 40 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 40 }}
       transition={{ type: 'spring', stiffness: 340, damping: 34 }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 flex-shrink-0 bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-[0_1px_0_rgba(15,23,42,0.06)]">
-        <button
-          onClick={onClose}
-          className="w-9 h-9 flex items-center justify-center rounded-2xl bg-white/80 border border-white/60 shadow-sm text-slate-600 hover:bg-white transition-colors touch-manipulation"
-        >
-          <ChevronLeft className="w-4.5 h-4.5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-[15px] font-semibold text-slate-800 truncate">
-            {reel.caption ? reel.caption.slice(0, 60) + (reel.caption.length > 60 ? '…' : '') : 'Ролик из аналитики'}
-          </h2>
-          {takenAt && (
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
+      {/* Header — точная копия VideoDetailPage */}
+      <div className="mb-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-shrink-0 rounded-none bg-white/78 backdrop-blur-glass-xl border-b border-white/65 shadow-glass p-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 min-h-[44px] min-w-[44px] pr-2 -ml-2 rounded-2xl text-slate-500 hover:text-slate-700 hover:bg-white/82 transition-colors active:scale-95 touch-manipulation"
+          >
+            <ChevronLeft className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm font-medium">Назад</span>
+          </button>
+          <div>
+            <h1 className="text-xl font-semibold text-neutral-900">Работа с роликом</h1>
+            <p className="text-neutral-500 text-sm">instagram reel · @{reel.shortcode?.slice(0, 12) || 'instagram'}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={instagramUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-white/78 border border-white/70 hover:bg-white text-slate-700 text-sm font-medium transition-colors shadow-glass-sm touch-manipulation"
+          >
+            <Instagram className="w-4 h-4" />
+            Открыть
+          </a>
+          {viewsDelta != null && viewsDelta !== 0 && (
+            <div className={cn(
+              'px-3 py-2 rounded-pill text-sm font-medium flex items-center gap-1.5',
+              viewsDelta > 0 ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-rose-50 border border-rose-200 text-rose-700'
+            )}>
+              {viewsDelta > 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+              {viewsDelta > 0 ? '+' : ''}{fmt(viewsDelta)} просмотров
+            </div>
           )}
         </div>
-        <a
-          href={instagramUrl} target="_blank" rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
-          className="w-9 h-9 flex items-center justify-center rounded-2xl bg-white/80 border border-white/60 shadow-sm text-slate-600 hover:bg-white transition-colors touch-manipulation"
-        >
-          <Instagram className="w-4 h-4" />
-        </a>
       </div>
 
-      {/* Main 3-column content */}
-      <div className="flex-1 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row gap-4 p-4 pb-8 md:pb-4">
+      {/* Main content — мобайл: скролл, десктоп: 3 колонки */}
+      <div className="flex-1 overflow-y-auto md:overflow-hidden w-full h-full">
+        <div className="w-full h-full p-4 md:p-4 pb-28 md:pb-4 flex flex-col">
+          <div className="flex flex-col md:flex-row md:flex-1 gap-4 md:min-h-0 md:overflow-hidden">
 
-        {/* ── Left column: thumbnail + stats + actions ── */}
-        <div className="flex-shrink-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light w-full md:w-auto md:min-w-[256px] md:max-w-[256px]">
+            {/* ── Left: thumbnail + папка + статистика ── */}
+            <div className="flex-shrink-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light w-full md:w-auto md:min-w-[256px] md:max-w-[min(256px,28vw)]">
 
-          {/* Thumbnail 9:16 */}
-          <div className="flex justify-center flex-shrink-0">
-            <div
-              className="relative rounded-2xl overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.18)] border border-white/65 bg-black"
-              style={{ aspectRatio: '9/16', width: 'min(100%, 220px)' }}
-            >
-              {reel.thumbnail_url ? (
-                <img
-                  src={proxyImageUrl(reel.thumbnail_url ?? undefined)}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover object-top"
-                  onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
-                />
-              ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
-                  <Film className="w-10 h-10 text-slate-500" />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Stats card 2×2 */}
-          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3">
-            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <div>
-                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(views)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">просмотров</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Heart className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                <div>
-                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(likes)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">лайков</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <div>
-                  <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(comments)}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">коммент.</p>
-                </div>
-              </div>
-              {takenAt && (
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-[13px] font-semibold text-slate-700 leading-none">{takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{takenAt.getFullYear()}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Дельта просмотров */}
-            {viewsDelta != null && viewsDelta !== 0 && (
-              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100">
-                {viewsDelta > 0
-                  ? <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500" />
-                  : <ArrowDownRight className="w-3.5 h-3.5 text-rose-500" />}
-                <span className={cn('text-[12px] font-semibold', viewsDelta > 0 ? 'text-emerald-600' : 'text-rose-600')}>
-                  {viewsDelta > 0 ? '+' : ''}{fmt(viewsDelta)}
-                </span>
-                <span className="text-[10px] text-slate-400">с прошлого обновления</span>
-              </div>
-            )}
-          </div>
-
-          {/* В папку */}
-          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3 space-y-2">
-            <button
-              onClick={() => setShowFolderPicker(v => !v)}
-              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              В папку
-            </button>
-            <AnimatePresence>
-              {showFolderPicker && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
+              {/* Thumbnail 9:16 — точная копия VideoDetailPage */}
+              <div className="flex justify-center flex-shrink-0">
+                <div
+                  className="relative rounded-2xl overflow-hidden shadow-[0_18px_40px_rgba(15,23,42,0.18)] border border-white/65 bg-black"
+                  style={{ aspectRatio: '9/16', width: 'min(100%, 220px)' }}
                 >
-                  <div className="pt-1 space-y-1">
-                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1 mb-1.5">Выбери папку</p>
-                    <button
-                      onClick={() => handleCopyToFolder(null)}
-                      className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
-                    >
-                      📥 Без папки
-                    </button>
-                    {folders.map((f: { id: string; name: string }) => (
-                      <button
-                        key={f.id}
-                        onClick={() => handleCopyToFolder(f.id)}
-                        className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-50 text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation"
-                      >
-                        📁 {f.name}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setShowFolderPicker(false)}
-                      className="w-full text-center py-2 text-[12px] text-slate-400 hover:text-slate-600 touch-manipulation"
-                    >
-                      Отмена
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Исходник из папки */}
-          {currentProject && (
-            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-3 space-y-2">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide px-1">Исходник из папки</p>
-              {linkedRef ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                    <span className="text-[13px] text-slate-700 truncate flex-1">
-                      {linkedRef.caption?.slice(0, 50) || 'Исходник без названия'}
-                      {(linkedRef.caption?.length ?? 0) > 50 ? '…' : ''}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setShowResponsiblePicker(true)}
-                        className="p-2.5 rounded-xl bg-slate-700 text-white hover:bg-slate-600 touch-manipulation flex items-center gap-1.5 shadow-sm min-h-[40px]"
-                        title="Выбрать ответственного"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        <span className="text-[12px] font-semibold">Ответственный</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleUnlinkRef}
-                        className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 touch-manipulation"
-                        title="Отвязать исходник"
-                      >
-                        <Unlink className="w-4 h-4" />
-                      </button>
+                  {reel.thumbnail_url ? (
+                    <img
+                      src={proxyImageUrl(reel.thumbnail_url ?? undefined)}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover object-top"
+                      onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+                      <Film className="w-10 h-10 text-slate-500" />
                     </div>
-                  </div>
-                  {linkedRef.responsibles?.length ? (
-                    <p className="text-[11px] text-slate-500 px-1">
-                      {linkedRef.responsibles.map(r => `${r.label}: ${r.value}`).join(', ')}
-                    </p>
-                  ) : null}
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+                  {/* Caption overlay at bottom */}
+                  {reel.caption && (
+                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent pointer-events-none">
+                      <p className="text-white text-[10px] font-medium leading-snug line-clamp-2">{reel.caption.slice(0, 60)}</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
+              </div>
+
+              {/* В ленту — папка (такой же стиль как VideoDetailPage folder picker) */}
+              <div className={cn(
+                "rounded-card-xl p-3 shadow-glass bg-white/82 backdrop-blur-glass-xl border border-white/70 relative",
+                showFolderPicker && "z-[60]"
+              )}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400 font-medium">Добавить в ленту</span>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowRefPicker(true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all touch-manipulation"
+                  onClick={() => setShowFolderPicker(!showFolderPicker)}
+                  className="w-full flex items-center justify-between px-3 py-2 min-h-[44px] rounded-xl border border-slate-200/80 bg-white/60 hover:bg-slate-50/80 active:bg-slate-100 transition-colors touch-manipulation"
                 >
-                  <Link2 className="w-3.5 h-3.5" />
-                  Привязать к исходнику
+                  <div className="flex items-center gap-2">
+                    <ArrowUpRight className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-slate-600">Выбрать папку</span>
+                  </div>
+                  <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", showFolderPicker && "rotate-180")} />
                 </button>
-              )}
-            </div>
-          )}
-
-          {showResponsiblePicker && linkedRef && (
-            <ResponsiblePickerModal
-              isOpen
-              onClose={() => setShowResponsiblePicker(false)}
-              refId={linkedRef.id}
-              refCaption={linkedRef.caption ?? undefined}
-              roles={rolesTemplate}
-              participants={participants}
-              currentResponsibles={linkedRef.responsibles ?? []}
-              onSave={(items) => handleSaveResponsibleReel(linkedRef.id, items)}
-            />
-          )}
-        </div>
-
-        {/* ── Center column: Transcription ── */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light">
-          <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-semibold text-slate-700">Транскрибация</p>
-            </div>
-            {transcript ? (
-              <p className="text-[13px] text-slate-600 leading-relaxed">{transcript}</p>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
-                  <Mic className="w-5 h-5 text-slate-400" />
-                </div>
-                <p className="text-[13px] text-slate-500 font-medium mb-1">Транскрибация недоступна</p>
-                <p className="text-[11px] text-slate-400">Для аналитики рилсов транскрибация в разработке</p>
-              </div>
-            )}
-            <button
-              onClick={handleTranscribe} disabled={transcribing || !reel.video_url}
-              className="mt-3 w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[13px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40 transition-all touch-manipulation"
-            >
-              {transcribing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mic className="w-3.5 h-3.5" />}
-              {transcribing ? 'Транскрибирую…' : 'Транскрибировать'}
-            </button>
-          </div>
-        </div>
-
-        {/* ── Right column: chart + caption + AI ── */}
-        <div className="flex-1 min-w-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light md:max-w-sm">
-
-          {/* Views chart */}
-          {chartData.length >= 2 ? (
-            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
-              <p className="text-[13px] font-semibold text-slate-700 mb-3">Динамика просмотров</p>
-              <AreaChart data={chartData} formatXLabel={(d) => formatChartDateLabel(d, 'day')} aspectRatio="2.5 / 1" margin={{ top: 12, right: 12, bottom: 28, left: 36 }}>
-                <Grid horizontal numTicksRows={3} />
-                <Area dataKey="views" fill="#6366f1" fillOpacity={0.18} stroke="#6366f1" strokeWidth={2} fadeEdges />
-                <YAxis numTicks={3} formatValue={(v) => fmt(v as number)} />
-                <XAxis numTicks={Math.min(chartData.length, 4)} />
-                <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
-              </AreaChart>
-              <p className="text-[10px] text-slate-400 text-center mt-2">{reelSnaps.length} снимков данных</p>
-            </div>
-          ) : (
-            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] px-4 py-5 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
-                <BarChart2 className="w-4.5 h-4.5 text-indigo-300" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-slate-600">
-                  {reelSnaps.length === 0 ? 'Нужно 2 обновления для динамики' : 'Ещё 1 обновление — и появится график'}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {reelSnaps.length === 0 ? 'Пока нет снимков данных' : `${reelSnaps.length}/2 снимков собрано`}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Caption */}
-          {reel.caption && (
-            <div className="bg-white/80 backdrop-blur-[24px] border border-white/70 rounded-2xl shadow-[0_2px_16px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.8)] p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[13px] font-semibold text-slate-700">Подпись</p>
-                {reel.caption.length > 120 && (
-                  <button onClick={() => setCaptionExpanded(v => !v)} className="text-[11px] text-indigo-500 font-medium">
-                    {captionExpanded ? 'Свернуть' : 'Развернуть'}
-                  </button>
+                {showFolderPicker && (
+                  isMobile ? createPortal(
+                    <div className="fixed inset-0 z-[200] flex flex-col justify-end">
+                      <div className="absolute inset-0 bg-black/40" onClick={() => setShowFolderPicker(false)} />
+                      <div className="relative bg-white rounded-t-2xl shadow-2xl p-4 pb-safe max-h-[70vh] overflow-y-auto">
+                        <div className="text-xs text-slate-400 font-medium mb-3">Скопировать в папку</div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyToFolder(null)}
+                          className="w-full flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-xl transition-colors text-left touch-manipulation active:bg-slate-50"
+                        >
+                          <div className="w-4 h-4 rounded bg-slate-300 flex-shrink-0" />
+                          <span className="text-sm font-medium text-slate-700">📥 Без папки</span>
+                        </button>
+                        {folderConfigs.map(f => (
+                          <button key={f.id} type="button" onClick={() => handleCopyToFolder(f.id)}
+                            className="w-full flex items-center gap-3 px-4 py-3 min-h-[48px] rounded-xl transition-colors text-left touch-manipulation active:bg-slate-50">
+                            <div className="w-4 h-4 rounded flex-shrink-0" style={{ backgroundColor: f.color || '#94a3b8' }} />
+                            <span className="text-sm font-medium text-slate-700 flex-1">{f.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>,
+                    document.body
+                  ) : (
+                    <div className="absolute left-0 right-0 top-full mt-1 rounded-card-xl shadow-glass-lg bg-white/95 backdrop-blur-glass-xl border border-white/[0.35] p-1.5 z-[70] shadow-xl max-h-[min(50vh,280px)] overflow-y-auto custom-scrollbar-light">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyToFolder(null)}
+                        className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg transition-colors text-left touch-manipulation hover:bg-slate-50"
+                      >
+                        <div className="w-3 h-3 rounded bg-slate-300" />
+                        <span className="text-sm text-slate-700">📥 Без папки</span>
+                      </button>
+                      {folderConfigs.map(f => (
+                        <button key={f.id} type="button" onClick={() => handleCopyToFolder(f.id)}
+                          className="w-full flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-lg transition-colors text-left touch-manipulation hover:bg-slate-50">
+                          <div className="w-3 h-3 rounded" style={{ backgroundColor: f.color || '#94a3b8' }} />
+                          <span className="text-sm text-slate-700">{f.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
-              <p className={cn('text-[13px] text-slate-600 leading-relaxed', !captionExpanded && 'line-clamp-4')}>
-                {reel.caption}
-              </p>
-            </div>
-          )}
 
-          {/* AI analyze */}
-          <button disabled className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-slate-200 text-slate-400 cursor-not-allowed bg-white/60">
-            <Sparkles className="w-4 h-4" />
-            <span className="text-[13px]">AI-анализ ролика — скоро</span>
-          </button>
+              {/* Статистика — точная копия VideoDetailPage stats */}
+              <div className="rounded-card-xl p-3 shadow-glass bg-white/82 backdrop-blur-glass-xl border border-white/70">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Eye className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">{fmt(views)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Heart className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">{fmt(likes)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <MessageCircle className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">{fmt(comments)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm font-medium">
+                      {takenAt ? takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Viral coefficient — точная копия VideoDetailPage */}
+                <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <Sparkles className="w-4 h-4" />
+                      <span className="text-sm">Виральность</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "text-sm font-bold",
+                        finalViralCoef > 10 ? "text-emerald-600" : finalViralCoef > 5 ? "text-amber-600" : "text-slate-600"
+                      )}>
+                        {Math.round(finalViralCoef)}K/день
+                      </span>
+                      {viralMult !== null && viralMult !== undefined && (
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-semibold",
+                          viralMult >= 4 ? "bg-red-100 text-red-700" :
+                          viralMult >= 3 ? "bg-amber-100 text-amber-700" :
+                          viralMult >= 2 ? "bg-lime-100 text-lime-700" :
+                          viralMult >= 1.5 ? "bg-green-100 text-green-700" :
+                          "bg-slate-100 text-slate-600"
+                        )}>
+                          {viralMult >= 1 ? `${Math.round(viralMult)}x` : `${(viralMult * 100).toFixed(0)}%`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Открыть в Instagram — точная копия VideoDetailPage */}
+              <a
+                href={instagramUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-card-xl bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] shadow-glass hover:shadow-glass-hover text-slate-700 text-sm font-medium transition-all touch-manipulation"
+              >
+                <Instagram className="w-4 h-4" />
+                Открыть в Instagram
+              </a>
+
+              {/* Ответственные — через привязку к исходнику из папки */}
+              {currentProject && (
+                <div className="rounded-card-xl p-3 shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] space-y-3">
+                  <p className="text-xs text-slate-400 font-medium">Ответственные</p>
+                  {linkedRef ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/60 border border-slate-200/60">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <Link2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <span className="text-[12px] text-slate-700 truncate">
+                            {linkedRef.caption?.slice(0, 35) || 'Исходник без названия'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowResponsiblePicker(true)}
+                            className="p-2 rounded-xl bg-slate-700 text-white hover:bg-slate-600 touch-manipulation flex items-center gap-1 shadow-sm min-h-[36px]"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span className="text-[11px] font-semibold">Назначить</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleUnlinkRef}
+                            className="p-2 rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 touch-manipulation"
+                          >
+                            <Unlink className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      {linkedRef.responsibles?.length ? (
+                        <div className="space-y-1">
+                          {linkedRef.responsibles.map(r => (
+                            <div key={r.templateId || r.label} className="flex items-center gap-2 px-2 py-1">
+                              <span className="text-[10px] font-medium text-slate-400 w-20 flex-shrink-0">{r.label}</span>
+                              <span className="text-[12px] text-slate-700 font-medium truncate">{r.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 px-1">Ответственные не назначены</p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-slate-500">Привяжи исходник из ленты, чтобы назначить ответственных и считать их в отчёте</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowRefPicker(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-2xl bg-white/78 backdrop-blur-glass border border-white/70 hover:bg-white text-slate-700 text-sm font-medium shadow-glass-sm transition-all touch-manipulation"
+                      >
+                        <Link2 className="w-4 h-4" />
+                        Привязать исходник
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {showResponsiblePicker && linkedRef && (
+                <ResponsiblePickerModal
+                  isOpen
+                  onClose={() => setShowResponsiblePicker(false)}
+                  refId={linkedRef.id}
+                  refCaption={linkedRef.caption ?? undefined}
+                  roles={rolesTemplate}
+                  participants={participants}
+                  currentResponsibles={linkedRef.responsibles ?? []}
+                  onSave={(items) => handleSaveResponsibleReel(linkedRef.id, items)}
+                />
+              )}
+            </div>
+
+            {/* ── Middle: Транскрибация — точная копия VideoDetailPage ── */}
+            <div className="flex-1 flex flex-col min-w-0 min-h-[320px] md:min-h-0 rounded-card-xl shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] overflow-hidden">
+              {/* Header */}
+              <div className="flex flex-col gap-3 p-4 border-b border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    <h3 className="font-semibold text-slate-800">Транскрибация</h3>
+                  </div>
+                  {transcript && (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(transcript); toast.success('Скопировано'); }}
+                      className="flex items-center gap-1.5 p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-700"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {transcribing ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center">
+                    <RefreshCw className="w-10 h-10 text-amber-500 animate-spin mb-3" />
+                    <p className="text-slate-600 font-medium">Транскрибация в процессе...</p>
+                    <p className="text-slate-400 text-sm">Это займёт несколько минут</p>
+                  </div>
+                ) : transcript ? (
+                  <p className="text-slate-700 text-sm leading-relaxed">{transcript}</p>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center">
+                    <Mic className="w-10 h-10 text-slate-300 mb-3" />
+                    <p className="text-slate-600 font-medium">Транскрибация не запущена</p>
+                    <p className="text-slate-400 text-sm mb-4">Доступна если есть ссылка на видео ролика</p>
+                    <button
+                      onClick={handleTranscribe}
+                      disabled={transcribing || !reel.video_url}
+                      className="px-4 py-2.5 rounded-card-xl bg-slate-600 hover:bg-slate-700 text-white font-medium transition-all shadow-glass flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <Mic className="w-4 h-4" />
+                      Транскрибировать
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Right: Аналитика — вместо сценария ── */}
+            <div className="flex-1 flex flex-col min-w-0 min-h-[320px] md:min-h-0 rounded-card-xl shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] md:overflow-hidden">
+              {/* Header */}
+              <div className="flex flex-col gap-3 p-4 border-b border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart2 className="w-5 h-5 text-slate-600 flex-shrink-0" />
+                    <h3 className="font-semibold text-slate-800">Аналитика</h3>
+                  </div>
+                  {allReels.length > 1 && (
+                    <button
+                      onClick={() => setShowRankingModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium border border-amber-200/60 transition-colors"
+                    >
+                      <Trophy className="w-3.5 h-3.5" />
+                      Топ роликов
+                    </button>
+                  )}
+                </div>
+                {/* Rankings mini-preview */}
+                {allReels.length > 1 && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100">
+                      <Eye className="w-3 h-3 text-indigo-500" />
+                      <span className="text-[11px] font-semibold text-indigo-700">
+                        #{rankByViews} по просмотрам
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100">
+                      <MessageCircle className="w-3 h-3 text-emerald-500" />
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        #{rankByComments} по коммент.
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">из {allReels.length}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Chart */}
+                {chartData.length >= 2 ? (
+                  <div>
+                    <p className="text-[12px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Динамика просмотров</p>
+                    <AreaChart data={chartData} formatXLabel={(d) => formatChartDateLabel(d, 'day')} aspectRatio="2.5 / 1" margin={{ top: 12, right: 12, bottom: 28, left: 36 }}>
+                      <Grid horizontal numTicksRows={3} />
+                      <Area dataKey="views" fill="#6366f1" fillOpacity={0.18} stroke="#6366f1" strokeWidth={2} fadeEdges />
+                      <YAxis numTicks={3} formatValue={(v) => fmt(v as number)} />
+                      <XAxis numTicks={Math.min(chartData.length, 4)} />
+                      <ChartTooltip rows={(p) => [{ color: '#6366f1', label: 'Просмотры', value: (p.views as number) ?? 0 }]} />
+                    </AreaChart>
+                    <p className="text-[10px] text-slate-400 text-center mt-1">{reelSnaps.length} снимков данных</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                    <BarChart2 className="w-5 h-5 text-indigo-300 flex-shrink-0" />
+                    <div>
+                      <p className="text-[12px] font-medium text-slate-600">
+                        {reelSnaps.length === 0 ? 'Нужно 2 обновления для графика' : 'Ещё 1 обновление — и появится график'}
+                      </p>
+                      <p className="text-[11px] text-slate-400">{reelSnaps.length}/2 снимков</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Caption */}
+                {reel.caption && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[12px] font-semibold text-slate-500 uppercase tracking-wide">Подпись</p>
+                      {reel.caption.length > 120 && (
+                        <button onClick={() => setCaptionExpanded(v => !v)} className="text-[11px] text-indigo-500 font-medium">
+                          {captionExpanded ? 'Свернуть' : 'Развернуть'}
+                        </button>
+                      )}
+                    </div>
+                    <p className={cn('text-[13px] text-slate-600 leading-relaxed', !captionExpanded && 'line-clamp-4')}>
+                      {reel.caption}
+                    </p>
+                  </div>
+                )}
+
+                {/* AI analyze placeholder */}
+                <button disabled className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-slate-200 text-slate-400 cursor-not-allowed">
+                  <Sparkles className="w-4 h-4" />
+                  <span className="text-[13px]">AI-анализ ролика — скоро</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Ref picker — full overlay */}
+      {/* ── Ref picker overlay ── */}
       <AnimatePresence>
         {showRefPicker && (
           <motion.div
-            className="absolute inset-0 z-20 flex flex-col bg-[#f8f8fc]"
+            className="absolute inset-0 z-20 flex flex-col bg-[#f5f6f8]"
             initial={{ opacity: 0, x: 32 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 32 }}
             transition={{ type: 'spring', stiffness: 380, damping: 36 }}
           >
-            {/* Шапка */}
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100/80 flex-shrink-0 bg-white/70 backdrop-blur-xl">
-              <button
-                type="button"
-                onClick={() => setShowRefPicker(false)}
-                className="w-9 h-9 rounded-2xl bg-white/80 border border-white/60 shadow-sm flex items-center justify-center text-slate-600 transition-colors touch-manipulation"
-              >
-                <ChevronLeft className="w-4.5 h-4.5" />
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100/80 flex-shrink-0 bg-white/78 backdrop-blur-glass-xl">
+              <button type="button" onClick={() => setShowRefPicker(false)}
+                className="flex items-center gap-2 min-h-[44px] pr-2 -ml-2 rounded-2xl text-slate-500 hover:text-slate-700 hover:bg-white/82 transition-colors touch-manipulation">
+                <ChevronLeft className="w-5 h-5 flex-shrink-0" />
+                <span className="text-sm font-medium">Назад</span>
               </button>
               <div className="flex-1">
                 <p className="text-[15px] font-semibold text-slate-800">Выбери исходник</p>
                 <p className="text-[11px] text-slate-400">Видео из папок проекта</p>
               </div>
             </div>
-
-            {/* Контент — папки с видео */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5 custom-scrollbar-light">
               {refs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -908,35 +1052,23 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
               ) : (
                 refsByFolder.map(group => (
                   <div key={group.folderId ?? '__inbox'}>
-                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
-                      📁 {group.folderName}
-                    </p>
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">📁 {group.folderName}</p>
                     <div className="grid grid-cols-3 gap-2">
                       {group.refs.map(ref => {
                         const isLinked = ref.shortcode === reel.shortcode;
                         const otherLinked = ref.shortcode && ref.shortcode !== reel.shortcode;
                         return (
-                          <button
-                            key={ref.id}
-                            type="button"
-                            onClick={() => handleLinkRef(ref.id)}
+                          <button key={ref.id} type="button" onClick={() => handleLinkRef(ref.id)}
                             className={cn(
                               'relative flex flex-col rounded-2xl overflow-hidden border-2 transition-all touch-manipulation text-left',
-                              isLinked
-                                ? 'border-emerald-400 ring-2 ring-emerald-200'
-                                : otherLinked
-                                  ? 'border-amber-300 opacity-70'
-                                  : 'border-transparent hover:border-indigo-300'
+                              isLinked ? 'border-emerald-400 ring-2 ring-emerald-200' : otherLinked ? 'border-amber-300 opacity-70' : 'border-transparent hover:border-indigo-300'
                             )}
                             style={{ aspectRatio: '9/16' }}
                           >
                             {ref.thumbnail_url ? (
-                              <img
-                                src={proxyImageUrl(ref.thumbnail_url ?? undefined)}
-                                alt=""
+                              <img src={proxyImageUrl(ref.thumbnail_url ?? undefined)} alt=""
                                 className="absolute inset-0 w-full h-full object-cover"
-                                onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
-                              />
+                                onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }} />
                             ) : (
                               <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
                                 <Film className="w-5 h-5 text-slate-400" />
@@ -944,13 +1076,11 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                             )}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
                             <div className="absolute bottom-0 left-0 right-0 p-1.5">
-                              <p className="text-white text-[9px] font-medium leading-tight line-clamp-2">
-                                {ref.caption?.slice(0, 30) || 'Без названия'}
-                              </p>
+                              <p className="text-white text-[9px] font-medium leading-tight line-clamp-2">{ref.caption?.slice(0, 30) || 'Без названия'}</p>
                             </div>
                             {isLinked && (
                               <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
-                                <Link2 className="w-2.5 h-2.5 text-white" />
+                                <Check className="w-2.5 h-2.5 text-white" />
                               </div>
                             )}
                           </button>
@@ -960,6 +1090,103 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                   </div>
                 ))
               )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Ranking modal — топ роликов по просмотрам и комментариям ── */}
+      <AnimatePresence>
+        {showRankingModal && (
+          <motion.div
+            className="absolute inset-0 z-30 flex flex-col bg-[#f5f6f8]"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 36 }}
+          >
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100/80 flex-shrink-0 bg-white/78 backdrop-blur-glass-xl shadow-glass">
+              <button type="button" onClick={() => setShowRankingModal(false)}
+                className="flex items-center gap-2 min-h-[44px] pr-2 -ml-2 rounded-2xl text-slate-500 hover:text-slate-700 hover:bg-white/82 transition-colors touch-manipulation">
+                <ChevronLeft className="w-5 h-5 flex-shrink-0" />
+                <span className="text-sm font-medium">Назад</span>
+              </button>
+              <div className="flex-1">
+                <p className="text-[15px] font-semibold text-slate-800">Топ роликов проекта</p>
+                <p className="text-[11px] text-slate-400">{allReels.length} роликов</p>
+              </div>
+              <Trophy className="w-5 h-5 text-amber-500" />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
+                {/* Топ по просмотрам */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Eye className="w-4 h-4 text-indigo-500" />
+                    <h4 className="text-[13px] font-semibold text-slate-700">По просмотрам</h4>
+                  </div>
+                  <div className="space-y-1.5">
+                    {sortedByViews.slice(0, 10).map((r, i) => (
+                      <div key={r.id} className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors",
+                        r.id === reel.id ? "bg-indigo-50 border border-indigo-200/60" : "bg-white/80 border border-white/60 shadow-sm"
+                      )}>
+                        <span className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-slate-100 text-slate-600" : i === 2 ? "bg-orange-100 text-orange-600" : "bg-slate-50 text-slate-500"
+                        )}>
+                          {i + 1}
+                        </span>
+                        {r.thumbnail_url ? (
+                          <img src={proxyImageUrl(r.thumbnail_url ?? undefined)} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-slate-200 flex-shrink-0 flex items-center justify-center">
+                            <Film className="w-4 h-4 text-slate-400" />
+                          </div>
+                        )}
+                        <p className="flex-1 text-[12px] text-slate-700 truncate">{r.caption?.slice(0, 45) || r.shortcode}</p>
+                        <span className="text-[12px] font-semibold text-slate-700 tabular-nums">{fmt(r.latest_view_count ?? 0)}</span>
+                        {r.id === reel.id && <span className="text-[10px] text-indigo-600 font-bold ml-1">← этот</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Топ по комментариям */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <MessageCircle className="w-4 h-4 text-emerald-500" />
+                    <h4 className="text-[13px] font-semibold text-slate-700">По комментариям</h4>
+                  </div>
+                  <div className="space-y-1.5">
+                    {sortedByComments.slice(0, 10).map((r, i) => (
+                      <div key={r.id} className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors",
+                        r.id === reel.id ? "bg-emerald-50 border border-emerald-200/60" : "bg-white/80 border border-white/60 shadow-sm"
+                      )}>
+                        <span className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-slate-100 text-slate-600" : i === 2 ? "bg-orange-100 text-orange-600" : "bg-slate-50 text-slate-500"
+                        )}>
+                          {i + 1}
+                        </span>
+                        {r.thumbnail_url ? (
+                          <img src={proxyImageUrl(r.thumbnail_url ?? undefined)} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-slate-200 flex-shrink-0 flex items-center justify-center">
+                            <Film className="w-4 h-4 text-slate-400" />
+                          </div>
+                        )}
+                        <p className="flex-1 text-[12px] text-slate-700 truncate">{r.caption?.slice(0, 45) || r.shortcode}</p>
+                        <span className="text-[12px] font-semibold text-slate-700 tabular-nums">{fmt(r.latest_comment_count ?? 0)}</span>
+                        {r.id === reel.id && <span className="text-[10px] text-emerald-600 font-bold ml-1">← этот</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1291,7 +1518,7 @@ export function Analytics() {
           )}
         </div>
         <AnimatePresence>
-          {selectedReel && <ReelDetailModal key="reel-detail" reel={selectedReel} onClose={() => setSelectedReel(null)} getReelSnapshots={getReelSnapshots} />}
+          {selectedReel && <ReelDetailModal key="reel-detail" reel={selectedReel} onClose={() => setSelectedReel(null)} getReelSnapshots={getReelSnapshots} allReels={reels} avgBottom3Views={avgBottom3Views} />}
           {showSyncModal && <SyncModal key="sync" onSync={handleSync} onClose={() => setShowSyncModal(false)} syncing={syncing} lastSyncAt={lastSyncAt} />}
         </AnimatePresence>
       </div>
@@ -1898,7 +2125,7 @@ export function Analytics() {
       <AnimatePresence>
         {showSetupModal && <SetupModal key="setup" initial={instagramUsername || ''} onSave={handleSaveUsername} onClose={() => setShowSetupModal(false)} />}
         {showSyncModal && <SyncModal key="sync" onSync={handleSync} onClose={() => setShowSyncModal(false)} syncing={syncing} lastSyncAt={lastSyncAt} />}
-        {selectedReel && <ReelDetailModal key="reel-detail" reel={selectedReel} onClose={() => setSelectedReel(null)} getReelSnapshots={getReelSnapshots} />}
+        {selectedReel && <ReelDetailModal key="reel-detail" reel={selectedReel} onClose={() => setSelectedReel(null)} getReelSnapshots={getReelSnapshots} allReels={reels} avgBottom3Views={avgBottom3Views} />}
       </AnimatePresence>
     </div>
   );
