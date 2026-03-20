@@ -17,7 +17,7 @@ import {
   BarChart2, RefreshCw, Instagram, Eye, Heart, MessageCircle,
   Award, Film, X, CalendarDays,
   ArrowUpRight, ArrowDownRight, Minus, Mic, Sparkles,
-  LayoutGrid, List, AlertCircle, Clock, ChevronRight, ChevronLeft, Users, Link2, Unlink, UserPlus,
+  LayoutGrid, List, Clock, ChevronRight, ChevronLeft, Users, Link2, Unlink, UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
