@@ -13,9 +13,10 @@ import { VideoGradientCard } from './ui/VideoGradientCard';
 import { ResponsiblePickerModal } from './ui/ResponsiblePickerModal';
 import { AreaChart, Area, Grid, XAxis, YAxis, ChartTooltip } from './ui/area-chart';
 import { cn } from '../utils/cn';
+import { proxyImageUrl, PLACEHOLDER_270x360 } from '../utils/imagePlaceholder';
 import {
   BarChart2, RefreshCw, Instagram, Eye, Heart, MessageCircle,
-  Award, Film, X, CalendarDays,
+  Award, Film, X, CalendarDays, Calendar,
   ArrowUpRight, ArrowDownRight, Minus, Mic, Sparkles,
   LayoutGrid, List, Clock, ChevronRight, ChevronLeft, Users, Link2, Unlink, UserPlus,
 } from 'lucide-react';
@@ -558,24 +559,34 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
         initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
         transition={{ type: 'spring', stiffness: 280, damping: 30 }}
       >
-        {/* Hero thumbnail */}
-        <div className="relative w-full flex-shrink-0" style={{ aspectRatio: '16/9' }}>
+        {/* Hero thumbnail — портретный кроп, iOS 26 glass overlay */}
+        <div className="relative w-full flex-shrink-0 overflow-hidden" style={{ height: '260px' }}>
+          {/* Размытый фон-заглушка */}
+          <div className="absolute inset-0 bg-slate-800" />
           {reel.thumbnail_url ? (
-            <img src={reel.thumbnail_url} alt="" className="w-full h-full object-cover" />
+            <img
+              src={proxyImageUrl(reel.thumbnail_url ?? undefined)}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover object-top"
+              onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
+            />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
               <Film className="w-12 h-12 text-slate-500" />
             </div>
           )}
-          {/* Gradient overlay */}
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.4) 100%)' }} />
+          {/* Градиентный оверлей как в VideoGradientCard */}
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: `linear-gradient(to top, rgba(9,11,18,0.92) 0%, rgba(20,24,34,0.60) 32%, rgba(32,36,44,0.22) 60%, rgba(255,255,255,0.04) 100%)`
+          }} />
+          <div className="absolute inset-x-0 top-0 h-20 pointer-events-none bg-gradient-to-b from-black/25 via-black/6 to-transparent" />
 
-          {/* Top buttons */}
+          {/* Верх: кнопка Instagram + закрыть */}
           <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
             <a
               href={instagramUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white/90 text-[11px] font-semibold backdrop-blur-md border border-white/20 touch-manipulation"
-              style={{ background: 'rgba(0,0,0,0.35)' }}
+              style={{ background: 'rgba(0,0,0,0.38)' }}
               onClick={e => e.stopPropagation()}
             >
               <Instagram className="w-3.5 h-3.5" />
@@ -584,41 +595,66 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 text-white/90 touch-manipulation"
-              style={{ background: 'rgba(0,0,0,0.35)' }}
+              style={{ background: 'rgba(0,0,0,0.38)' }}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Bottom title */}
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-6">
-            <p className="text-white font-semibold text-[15px] leading-snug line-clamp-2 drop-shadow-sm">
-              {reel.caption ? reel.caption.slice(0, 80) + (reel.caption.length > 80 ? '…' : '') : 'Без подписи'}
-            </p>
-            <p className="text-white/60 text-[11px] mt-0.5">
-              {takenAt ? takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+          {/* Низ: стеклянные пилюли со статами + заголовок */}
+          <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-10">
+            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+              {views > 0 && (
+                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
+                  <Eye className="w-2.5 h-2.5 text-white/85 flex-shrink-0" strokeWidth={2} />
+                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(views)}</span>
+                </div>
+              )}
+              {likes > 0 && (
+                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
+                  <Heart className="w-2.5 h-2.5 text-rose-300 flex-shrink-0" strokeWidth={2} />
+                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(likes)}</span>
+                </div>
+              )}
+              {comments > 0 && (
+                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
+                  <MessageCircle className="w-2.5 h-2.5 text-emerald-300 flex-shrink-0" strokeWidth={2} />
+                  <span className="text-[11px] font-semibold text-white/90 tabular-nums">{fmt(comments)}</span>
+                </div>
+              )}
+              {takenAt && (
+                <div className="px-2 py-1 rounded-full backdrop-blur-[20px] backdrop-saturate-[180%] flex items-center gap-1 border border-white/30 bg-black/38 shadow-[0_4px_14px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.16)]">
+                  <Calendar className="w-2.5 h-2.5 text-white/70 flex-shrink-0" strokeWidth={2} />
+                  <span className="text-[11px] font-semibold text-white/90">{takenAt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
+                </div>
+              )}
+            </div>
+            <p className="text-white font-semibold text-[14px] leading-snug line-clamp-2 drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
+              {reel.caption ? reel.caption.slice(0, 90) + (reel.caption.length > 90 ? '…' : '') : 'Без подписи'}
             </p>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {/* Stats row */}
+          {/* Stats row — iOS 26 glass cards */}
           <div className="flex items-stretch gap-2 px-4 pt-4 pb-0">
             {[
-              { icon: <Eye className="w-4 h-4" />, value: views, delta: viewsDelta, label: 'просмотров', color: '#6366f1', bg: 'rgba(99,102,241,0.08)' },
-              { icon: <Heart className="w-4 h-4" />, value: likes, label: 'лайков', color: '#f43f5e', bg: 'rgba(244,63,94,0.08)' },
-              { icon: <MessageCircle className="w-4 h-4" />, value: comments, label: 'коммент.', color: '#10b981', bg: 'rgba(16,185,129,0.08)' },
+              { icon: <Eye className="w-3.5 h-3.5" />, value: views, delta: viewsDelta, label: 'просмотров', color: '#6366f1' },
+              { icon: <Heart className="w-3.5 h-3.5" />, value: likes, label: 'лайков', color: '#f43f5e' },
+              { icon: <MessageCircle className="w-3.5 h-3.5" />, value: comments, label: 'коммент.', color: '#10b981' },
             ].map(s => (
-              <div key={s.label} className="flex-1 rounded-2xl px-3 py-3 flex flex-col gap-0.5" style={{ background: s.bg }}>
-                <span style={{ color: s.color }}>{s.icon}</span>
-                <p className="text-[20px] font-bold text-slate-900 leading-none tabular-nums mt-1">{fmt(s.value)}</p>
+              <div key={s.label} className="flex-1 rounded-2xl px-3 py-3 flex flex-col gap-1 bg-white/72 backdrop-blur-sm border border-white/80 shadow-[0_2px_12px_rgba(0,0,0,0.06),inset_0_1px_0_rgba(255,255,255,0.85)]">
+                <div className="flex items-center gap-1.5">
+                  <span style={{ color: s.color }}>{s.icon}</span>
+                  <p className="text-[10px] text-slate-400 font-medium leading-none">{s.label}</p>
+                </div>
+                <p className="text-[17px] font-bold text-slate-800 leading-none tabular-nums">{fmt(s.value)}</p>
                 {s.delta != null && (
-                  <p className={cn('text-[11px] font-semibold flex items-center gap-0.5', s.delta > 0 ? 'text-emerald-500' : s.delta < 0 ? 'text-rose-500' : 'text-slate-400')}>
+                  <p className={cn('text-[10px] font-semibold flex items-center gap-0.5', s.delta > 0 ? 'text-emerald-500' : s.delta < 0 ? 'text-rose-500' : 'text-slate-400')}>
                     {s.delta > 0 ? <ArrowUpRight className="w-3 h-3" /> : s.delta < 0 ? <ArrowDownRight className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                    {fmt(Math.abs(s.delta))}
+                    {s.delta !== 0 ? fmt(Math.abs(s.delta)) : '—'}
                   </p>
                 )}
-                <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
               </div>
             ))}
           </div>
@@ -734,27 +770,43 @@ function ReelDetailModal({ reel, onClose, getReelSnapshots }: {
                           transition={{ duration: 0.2 }}
                           className="overflow-hidden"
                         >
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {refsWithoutShortcode.length === 0 ? (
-                              <p className="text-[12px] text-slate-500 px-2 py-2">Нет видео в папках. Добавь видео в папки проекта в ленте.</p>
+                          <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar-light">
+                            {refs.length === 0 ? (
+                              <p className="text-[12px] text-slate-500 px-2 py-2">Нет видео в проекте. Добавь видео в папки в разделе «Лента».</p>
                             ) : (
-                              refsWithoutShortcode.map((ref) => (
-                                <button
-                                  key={ref.id}
-                                  type="button"
-                                  onClick={() => handleLinkRef(ref.id)}
-                                  className="w-full text-left px-3 py-2.5 rounded-xl bg-white text-[13px] text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation flex items-center gap-2"
-                                >
-                                  {ref.thumbnail_url ? (
-                                    <img src={ref.thumbnail_url} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded bg-slate-200 shrink-0 flex items-center justify-center">
-                                      <Film className="w-4 h-4 text-slate-400" />
+                              refs.map((ref) => {
+                                const alreadyLinked = ref.shortcode && ref.shortcode !== reel.shortcode;
+                                return (
+                                  <button
+                                    key={ref.id}
+                                    type="button"
+                                    onClick={() => handleLinkRef(ref.id)}
+                                    className="w-full text-left px-3 py-2 rounded-xl bg-white text-[13px] text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation flex items-center gap-2"
+                                  >
+                                    {ref.thumbnail_url ? (
+                                      <img
+                                        src={proxyImageUrl(ref.thumbnail_url ?? undefined)}
+                                        alt=""
+                                        className="w-9 h-12 rounded-lg object-cover shrink-0"
+                                        onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_270x360; }}
+                                      />
+                                    ) : (
+                                      <div className="w-9 h-12 rounded-lg bg-slate-200 shrink-0 flex items-center justify-center">
+                                        <Film className="w-4 h-4 text-slate-400" />
+                                      </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="truncate text-[13px] text-slate-700 font-medium">{ref.caption?.slice(0, 40) || 'Без названия'}{(ref.caption?.length ?? 0) > 40 ? '…' : ''}</p>
+                                      {alreadyLinked && (
+                                        <p className="text-[10px] text-amber-500 mt-0.5">Уже привязан к другому ролику</p>
+                                      )}
+                                      {ref.shortcode === reel.shortcode && (
+                                        <p className="text-[10px] text-emerald-500 mt-0.5">Уже привязан к этому ролику</p>
+                                      )}
                                     </div>
-                                  )}
-                                  <span className="truncate">{ref.caption?.slice(0, 40) || 'Без названия'}{(ref.caption?.length ?? 0) > 40 ? '…' : ''}</span>
-                                </button>
-                              ))
+                                  </button>
+                                );
+                              })
                             )}
                             <button
                               type="button"

@@ -10,6 +10,7 @@ export function useUserBalance() {
   const [balance, setBalance] = useState<number>(DEFAULT_BALANCE);
   const [loading, setLoading] = useState(true);
   const [lastDeduct, setLastDeduct] = useState<number>(0);
+  const [lastDeductId, setLastDeductId] = useState<number>(0);
   const deductTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchBalance = useCallback(async () => {
@@ -86,6 +87,7 @@ export function useUserBalance() {
       if (updateError) return false;
       setBalance(newBalance);
       setLastDeduct(amount);
+      setLastDeductId(prev => prev + 1);
       if (deductTimeoutRef.current) clearTimeout(deductTimeoutRef.current);
       deductTimeoutRef.current = setTimeout(() => {
         setLastDeduct(0);
@@ -100,5 +102,5 @@ export function useUserBalance() {
 
   const canAfford = useCallback((cost: number) => balance >= cost && cost >= 0, [balance]);
 
-  return { balance, loading, deduct, canAfford, refetch: fetchBalance, lastDeduct };
+  return { balance, loading, deduct, canAfford, refetch: fetchBalance, lastDeduct, lastDeductId };
 }

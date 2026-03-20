@@ -16,7 +16,7 @@ interface TokenBalanceDisplayProps {
  * Баланс токенов в стиле iOS 26: frosted glass, liquid glass pill, анимация списания.
  */
 export function TokenBalanceDisplay({ variant = 'compact', className }: TokenBalanceDisplayProps) {
-  const { balance, loading, lastDeduct } = useTokenBalance();
+  const { balance, loading, lastDeduct, lastDeductId } = useTokenBalance();
   const [imgError, setImgError] = useState(false);
 
   const isCompact = variant === 'compact';
@@ -88,21 +88,23 @@ export function TokenBalanceDisplay({ variant = 'compact', className }: TokenBal
         )}
       </motion.div>
 
-      {/* Анимация списания: "-N" в стиле iOS 26 glass */}
+      {/* Анимация списания: "-N" в стиле iOS 26 — всплывает и растворяется */}
       <AnimatePresence>
         {lastDeduct > 0 && (
           <motion.span
-            key={`deduct-${lastDeduct}`}
-            initial={{ opacity: 1, y: 0, scale: 1 }}
-            animate={{ opacity: 0, y: -20, scale: 0.9 }}
-            exit={{ opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 28, mass: 0.6 }}
+            key={lastDeductId}
+            initial={{ opacity: 0, y: 6, scale: 0.82 }}
+            animate={{
+              opacity: [0, 1, 1, 0],
+              y: [6, -2, -6, -32],
+              scale: [0.82, 1.08, 1, 0.88],
+            }}
+            transition={{ duration: 1.1, times: [0, 0.12, 0.55, 1], ease: 'easeOut' }}
             className={cn(
-              'absolute bottom-full left-1/2 -translate-x-1/2 mb-1 whitespace-nowrap',
+              'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap pointer-events-none z-[200]',
               'px-2.5 py-1 rounded-pill font-bold tabular-nums text-xs',
-              'bg-accent-negative/90 text-white',
-              'backdrop-blur-glass border border-white/30',
-              'shadow-[0_4px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.2)]'
+              'bg-rose-500 text-white',
+              'shadow-[0_6px_20px_rgba(244,63,94,0.4),inset_0_1px_0_rgba(255,255,255,0.25)]'
             )}
           >
             −{lastDeduct}

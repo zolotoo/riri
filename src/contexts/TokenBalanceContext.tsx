@@ -9,6 +9,8 @@ interface TokenBalanceContextType {
   refetch: () => Promise<void>;
   /** Последнее списание для анимации (сбрасывается через ~1.8s) */
   lastDeduct: number;
+  /** Уникальный счётчик списаний — меняется при каждом deduct для key анимации */
+  lastDeductId: number;
 }
 
 const TokenBalanceContext = createContext<TokenBalanceContextType | null>(null);
@@ -32,6 +34,7 @@ export function useTokenBalance() {
       canAfford: () => false,
       refetch: async () => {},
       lastDeduct: 0,
+      lastDeductId: 0,
     };
   }
   return ctx;

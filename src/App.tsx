@@ -786,7 +786,7 @@ function AppContent() {
 
       {/* Main Content — контент идёт до низа, таб-бар поверх */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
-        <AnimatePresence mode="wait" initial={false}>
+        <AnimatePresence mode="sync" initial={false}>
           <motion.div
             key={viewMode}
             className="flex-1 min-h-0 overflow-hidden flex flex-col absolute inset-0"
