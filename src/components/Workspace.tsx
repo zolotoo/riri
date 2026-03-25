@@ -8,7 +8,7 @@ import { useActionHistory } from '../hooks/useActionHistory';
 import { useProjectSync } from '../hooks/useProjectSync';
 import { useProjectPresence } from '../hooks/useProjectPresence';
 import { PresenceIndicator } from './ui/PresenceIndicator';
-import { Sparkles, FileText, Trash2, ExternalLink, Plus, Inbox, FolderOpen, Settings, GripVertical, X, Palette, Eye, Heart, ChevronDown, ChevronRight, Undo2, Images, Link2, Loader2, MessageCircle, BookOpen, TrendingUp, PenLine } from 'lucide-react';
+import { Sparkles, FileText, Trash2, ExternalLink, Plus, Inbox, FolderOpen, Settings, GripVertical, X, Palette, Eye, Heart, ChevronDown, ChevronRight, Undo2, Images, Link2, Loader2, MessageCircle, BookOpen, TrendingUp, PenLine, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../utils/cn';
 import { proxyImageUrl } from '../utils/imagePlaceholder';
@@ -18,6 +18,7 @@ import { CarouselDetailPage } from './CarouselDetailPage';
 import { useCarousels, type SavedCarousel } from '../hooks/useCarousels';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
 import { calculateViralMultiplier, applyViralMultiplierToCoefficient, getProfileStats, calculateCarouselViralMultiplier } from '../services/profileStatsService';
+import { startGlobalTranscription } from '../services/globalVideoService';
 import { dialogScale, dialogSlideUp, backdropFade, iosSpringSoft } from '../utils/motionPresets';
 import { TokenBadge } from './ui/TokenBadge';
 import { GlassFolderIcon } from './ui/GlassFolderIcons';
@@ -238,8 +239,19 @@ export function Workspace(_props?: WorkspaceProps) {
   const [manualScript, setManualScript] = useState('');
   const [isAddingManual, setIsAddingManual] = useState(false);
   const [descriptionModalText, setDescriptionModalText] = useState<string | null>(null);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showCarouselSortDropdown, setShowCarouselSortDropdown] = useState(false);
+  const [activeTranscribingIds, setActiveTranscribingIds] = useState<Set<string>>(new Set());
   const { carousels, loading: carouselsLoading, addCarousel, refreshCarouselThumbnail, refetch: refetchCarousels } = useCarousels();
   const { canAfford, deduct } = useTokenBalance();
+
+  // Polling при активных фоновых транскрипциях — обновляем статус на карточках
+  useEffect(() => {
+    if (activeTranscribingIds.size === 0) return;
+    const interval = setInterval(() => { refetchInboxVideos(); }, 5000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTranscribingIds.size]);
 
   // Сортировка каруселей: по виральности, по лайкам, по дате добавления
   const sortedCarousels = useMemo(() => {
@@ -436,6 +448,28 @@ export function Workspace(_props?: WorkspaceProps) {
       console.error('Ошибка перемещения:', err);
       toast.error('Ошибка перемещения');
     }
+  };
+
+  const handleBackgroundTranscribe = async (video: ZoneVideo) => {
+    if (!video.url || isScriptOnlyFeedCard(video)) return;
+    const status = (video as any).transcript_status;
+    if (status === 'completed' || status === 'processing' || status === 'downloading' || status === 'queued') return;
+    const cost = getTokenCost('transcribe_video');
+    if (!canAfford(cost)) {
+      toast.error('Недостаточно коинов для транскрипции');
+      return;
+    }
+    const ok = await deduct(cost, { action: 'transcribe_video', section: 'lenta', label: video.owner_username || undefined });
+    if (!ok) {
+      toast.error('Недостаточно коинов');
+      return;
+    }
+    setActiveTranscribingIds(prev => new Set(prev).add(video.id));
+    toast.success('Транскрипция запущена', { description: 'Текст появится на карточке автоматически' });
+    const shortcode = video.shortcode ?? video.url?.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/)?.[1] ?? null;
+    startGlobalTranscription(video.id, (video as any).global_video_id, shortcode, video.url).catch(() => {
+      setActiveTranscribingIds(prev => { const s = new Set(prev); s.delete(video.id); return s; });
+    });
   };
 
   const handleDeleteVideo = async (videoId: string) => {
@@ -1377,31 +1411,54 @@ export function Workspace(_props?: WorkspaceProps) {
                     <span className="hidden sm:inline">Отменить</span>
                   </button>
                 )}
-                <div className="sort-pill flex items-center gap-1.5 overflow-x-auto overflow-y-hidden flex-1 min-w-0 scrollbar-hide">
-                {[
-                  { value: 'viral', label: 'Виральность', icon: Sparkles, title: 'По коэффициенту виральности' },
-                  { value: 'views', label: 'Просмотры', icon: Eye, title: 'По количеству просмотров' },
-                  { value: 'views_from_avg', label: 'От среднего', icon: TrendingUp, title: 'По отклонению просмотров от среднего' },
-                  { value: 'likes', label: 'Лайки', icon: Heart, title: 'По количеству лайков' },
-                  { value: 'recent', label: 'Недавно', icon: Inbox, title: 'По дате добавления' },
-                ].map(({ value, label, icon: Icon, title }) => (
-                  <button
-                    key={value}
-                    onClick={() => setSortBy(value as typeof sortBy)}
-                    title={title}
-                    style={{ padding: "6px 12px" }}
-                    className={cn(
-                      "sort-pill flex items-center gap-1.5 rounded-xl text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0 touch-manipulation",
-                      sortBy === value
-                        ? "bg-slate-800 text-white shadow-glass-sm"
-                        : "bg-white/68 backdrop-blur-glass border border-white/55 text-slate-500 hover:bg-white/84 hover:text-slate-700"
-                    )}
-                  >
-                    <Icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
-                    <span>{label}</span>
-                  </button>
-                ))}
-                </div>
+                {/* Сортировка — компактный dropdown */}
+                {(() => {
+                  const reelSortOptions = [
+                    { value: 'viral', label: 'Виральность', icon: Sparkles },
+                    { value: 'views', label: 'Просмотры', icon: Eye },
+                    { value: 'views_from_avg', label: 'От среднего', icon: TrendingUp },
+                    { value: 'likes', label: 'Лайки', icon: Heart },
+                    { value: 'recent', label: 'Недавно', icon: Inbox },
+                  ] as const;
+                  const current = reelSortOptions.find(o => o.value === sortBy) ?? reelSortOptions[0];
+                  const CurrentIcon = current.icon;
+                  return (
+                    <div className="relative flex-shrink-0">
+                      <button
+                        onClick={() => setShowSortDropdown(v => !v)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl bg-white/68 backdrop-blur-glass border border-white/55 text-slate-700 text-xs font-semibold transition-colors hover:bg-white/84 shadow-glass-sm touch-manipulation"
+                      >
+                        <CurrentIcon className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" strokeWidth={2.5} />
+                        {current.label}
+                        <ChevronDown className={cn("w-3 h-3 text-slate-400 transition-transform", showSortDropdown && "rotate-180")} strokeWidth={2.5} />
+                      </button>
+                      {showSortDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-[40]" onClick={() => setShowSortDropdown(false)} />
+                          <div className="absolute right-0 top-full mt-1.5 z-[41] min-w-[170px] rounded-2xl bg-white/92 backdrop-blur-xl border border-white/60 shadow-glass p-1.5 animate-in fade-in zoom-in-95 duration-150">
+                            {reelSortOptions.map(({ value, label, icon: Icon }) => {
+                              const active = sortBy === value;
+                              return (
+                                <button
+                                  key={value}
+                                  onClick={() => { setSortBy(value as typeof sortBy); setShowSortDropdown(false); }}
+                                  className={cn(
+                                    "w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-sm font-medium text-left transition-colors touch-manipulation",
+                                    active ? "bg-white/88 border border-white/60 shadow-glass-sm text-slate-800" : "hover:bg-white/65 text-slate-700"
+                                  )}
+                                >
+                                  <Icon className="w-4 h-4 flex-shrink-0 text-slate-500" strokeWidth={2.5} />
+                                  <span className="flex-1">{label}</span>
+                                  {active && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" strokeWidth={2.5} />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             {/* Добавить рилс по ссылке или вручную */}
@@ -1559,6 +1616,7 @@ export function Workspace(_props?: WorkspaceProps) {
                       setDescriptionModalText(video.title || 'Нет описания');
                       setCardMenuVideoId(null);
                     }}
+                    onTranscribeClick={!isScriptOnlyFeedCard(video) && video.url ? () => handleBackgroundTranscribe(video) : undefined}
                     folderMenu={
                       <div className="bg-glass-white/90 backdrop-blur-glass-xl rounded-card-xl shadow-glass border border-white/[0.35] p-1.5 min-w-[140px] animate-in fade-in slide-in-from-top-2 duration-200">
                         <button
@@ -1772,27 +1830,52 @@ export function Workspace(_props?: WorkspaceProps) {
                 </div>
                 {/* Сортировка каруселей */}
                 {carousels.length > 0 && (
-                  <div className="flex items-center gap-2 mb-4 flex-wrap">
-                    <span className="text-xs text-slate-500 font-medium">Сортировка:</span>
-                    {[
-                      { value: 'viral' as const, label: 'Виральность', icon: Sparkles },
-                      { value: 'likes' as const, label: 'Лайки', icon: Heart },
-                      { value: 'recent' as const, label: 'Недавно', icon: Inbox },
-                    ].map(({ value, label, icon: Icon }) => (
-                      <button
-                        key={value}
-                        onClick={() => setCarouselSortBy(value)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-3 py-2 rounded-2xl text-sm font-medium transition-all',
-                          carouselSortBy === value
-                            ? 'bg-slate-800 text-white shadow-glass-sm'
-                            : 'bg-white/68 backdrop-blur-glass border border-white/55 text-slate-600 hover:bg-white/84'
-                        )}
-                      >
-                        <Icon className="w-3.5 h-3.5" strokeWidth={2.5} />
-                        {label}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-2 mb-4">
+                    {(() => {
+                      const carouselSortOptions = [
+                        { value: 'viral' as const, label: 'Виральность', icon: Sparkles },
+                        { value: 'likes' as const, label: 'Лайки', icon: Heart },
+                        { value: 'recent' as const, label: 'Недавно', icon: Inbox },
+                      ];
+                      const current = carouselSortOptions.find(o => o.value === carouselSortBy) ?? carouselSortOptions[0];
+                      const CurrentIcon = current.icon;
+                      return (
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowCarouselSortDropdown(v => !v)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-xl bg-white/68 backdrop-blur-glass border border-white/55 text-slate-700 text-xs font-semibold transition-colors hover:bg-white/84 shadow-glass-sm touch-manipulation"
+                          >
+                            <CurrentIcon className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" strokeWidth={2.5} />
+                            {current.label}
+                            <ChevronDown className={cn("w-3 h-3 text-slate-400 transition-transform", showCarouselSortDropdown && "rotate-180")} strokeWidth={2.5} />
+                          </button>
+                          {showCarouselSortDropdown && (
+                            <>
+                              <div className="fixed inset-0 z-[40]" onClick={() => setShowCarouselSortDropdown(false)} />
+                              <div className="absolute left-0 top-full mt-1.5 z-[41] min-w-[160px] rounded-2xl bg-white/92 backdrop-blur-xl border border-white/60 shadow-glass p-1.5 animate-in fade-in zoom-in-95 duration-150">
+                                {carouselSortOptions.map(({ value, label, icon: Icon }) => {
+                                  const active = carouselSortBy === value;
+                                  return (
+                                    <button
+                                      key={value}
+                                      onClick={() => { setCarouselSortBy(value); setShowCarouselSortDropdown(false); }}
+                                      className={cn(
+                                        "w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[40px] rounded-xl text-sm font-medium text-left transition-colors touch-manipulation",
+                                        active ? "bg-white/88 border border-white/60 shadow-glass-sm text-slate-800" : "hover:bg-white/65 text-slate-700"
+                                      )}
+                                    >
+                                      <Icon className="w-4 h-4 flex-shrink-0 text-slate-500" strokeWidth={2.5} />
+                                      <span className="flex-1">{label}</span>
+                                      {active && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" strokeWidth={2.5} />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 {carouselsLoading ? (

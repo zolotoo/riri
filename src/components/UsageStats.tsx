@@ -154,12 +154,38 @@ function getActionLabel(action: string): string {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+interface UserBalanceRow {
+  user_id: string;
+  telegram_username: string | null;
+  token_balance: number;
+  created_at: string;
+}
+
 export function UsageStats() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>('30d');
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [userBalances, setUserBalances] = useState<UserBalanceRow[]>([]);
+  const [balancesLoading, setBalancesLoading] = useState(true);
+
+  const fetchBalances = useCallback(async () => {
+    setBalancesLoading(true);
+    try {
+      const res = await fetch('/api/project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'user-balances', userId: user?.telegram_username }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) setUserBalances(json.users || []);
+    } catch { /* ignore */ } finally {
+      setBalancesLoading(false);
+    }
+  }, [user?.telegram_username]);
+
+  useEffect(() => { fetchBalances(); }, [fetchBalances]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -449,6 +475,48 @@ export function UsageStats() {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* User Balances */}
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                Баланс коинов пользователей
+              </h2>
+              <button onClick={fetchBalances} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" />
+                Обновить
+              </button>
+            </div>
+            {balancesLoading ? (
+              <p className="text-xs text-slate-400">Загрузка...</p>
+            ) : userBalances.length === 0 ? (
+              <p className="text-xs text-slate-400">Нет данных</p>
+            ) : (
+              <div className="space-y-1.5">
+                {userBalances.map(u => {
+                  const name = u.telegram_username ? `@${u.telegram_username}` : u.user_id.slice(0, 8) + '…';
+                  const bal = u.token_balance ?? 0;
+                  const maxBal = Math.max(...userBalances.map(x => x.token_balance ?? 0), 1);
+                  const pct = Math.round((bal / maxBal) * 100);
+                  return (
+                    <div key={u.user_id} className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600 w-32 truncate flex-shrink-0">{name}</span>
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full", bal <= 3 ? "bg-red-400" : bal <= 10 ? "bg-amber-400" : "bg-emerald-400")}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={cn("text-xs font-semibold tabular-nums w-8 text-right flex-shrink-0", bal <= 3 ? "text-red-500" : bal <= 10 ? "text-amber-500" : "text-slate-700")}>
+                        {bal}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* By user */}

@@ -76,8 +76,9 @@ export default async function handler(req, res) {
   if (action === 'remove') return handleRemove(req, res, supabase);
   if (action === 'role') return handleRole(req, res, supabase);
   if (action === 'usage-stats') return handleUsageStats(req, res, supabaseUrl, supabaseServiceKey);
+  if (action === 'user-balances') return handleUserBalances(req, res, supabase);
 
-  return res.status(400).json({ error: 'Unknown action', expected: ['invite', 'remove', 'role', 'usage-stats'] });
+  return res.status(400).json({ error: 'Unknown action', expected: ['invite', 'remove', 'role', 'usage-stats', 'user-balances'] });
 }
 
 async function sendInviteEmailNotification(projectName, email, memberId) {
@@ -282,6 +283,23 @@ async function handleUsageStats(req, res, supabaseUrl, supabaseServiceKey) {
     return res.status(200).json({ success: true, rows: data });
   } catch (err) {
     console.error('[usage-stats]', err?.message);
+    return res.status(500).json({ error: err?.message || 'Internal error' });
+  }
+}
+
+async function handleUserBalances(req, res, supabase) {
+  const { userId } = req.body || {};
+  if (!userId || userId.toLowerCase() !== ADMIN_USERNAME.toLowerCase()) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, telegram_username, token_balance, created_at')
+      .order('token_balance', { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true, users: data || [] });
+  } catch (err) {
     return res.status(500).json({ error: err?.message || 'Internal error' });
   }
 }

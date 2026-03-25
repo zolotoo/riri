@@ -4,7 +4,7 @@ import { useUserBalance } from '../hooks/useUserBalance';
 interface TokenBalanceContextType {
   balance: number;
   loading: boolean;
-  deduct: (amount: number) => Promise<boolean>;
+  deduct: (amount: number, meta?: { action?: string; section?: string; label?: string }) => Promise<boolean>;
   canAfford: (cost: number) => boolean;
   refetch: () => Promise<void>;
   /** Последнее списание для анимации (сбрасывается через ~1.8s) */

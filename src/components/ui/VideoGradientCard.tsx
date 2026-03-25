@@ -3,7 +3,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "../../utils/cn";
 import { proxyImageUrl, PLACEHOLDER_270x360 } from "../../utils/imagePlaceholder";
-import { Sparkles, MoreVertical, ArrowRight, Eye, Heart, Loader2, FileText, AlertCircle, MessageCircle, TrendingUp, Calendar, BookOpen, PenLine } from "lucide-react";
+import { Sparkles, MoreVertical, ArrowRight, Eye, Heart, Loader2, FileText, AlertCircle, MessageCircle, TrendingUp, Calendar, BookOpen, PenLine, Mic } from "lucide-react";
 
 export interface VideoGradientCardProps {
   thumbnailUrl?: string;
@@ -29,6 +29,8 @@ export interface VideoGradientCardProps {
   onThumbnailError?: (videoId: string, shortcode: string, silent?: boolean) => void | Promise<void>;
   /** При успешной загрузке — сохранить в Storage (если URL не из Storage) */
   onThumbnailLoad?: (videoId: string, shortcode: string, url: string) => void | Promise<void>;
+  /** Быстрая транскрипция прямо из ленты (без открытия карточки) */
+  onTranscribeClick?: () => void;
   videoId?: string;
   shortcode?: string;
   className?: string;
@@ -64,6 +66,7 @@ export const VideoGradientCard = ({
   onFolderMenuToggle,
   folderMenu,
   onDescriptionClick,
+  onTranscribeClick,
   onThumbnailError,
   onThumbnailLoad,
   videoId,
@@ -309,6 +312,25 @@ export const VideoGradientCard = ({
               </motion.button>
             )}
             
+            {/* Кнопка Транскрипция — только desktop, только при наведении, только если нет транскрипта */}
+            {onTranscribeClick && !isManual && transcriptStatus !== 'completed' && transcriptStatus !== 'processing' && transcriptStatus !== 'downloading' && transcriptStatus !== 'queued' && (
+              <motion.button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onTranscribeClick(); }}
+                title="Транскрибировать видео в текст"
+                className={cn(
+                  "px-2 py-1 rounded-lg border border-white/25 flex items-center gap-1 transition-colors touch-manipulation",
+                  "bg-black/40 text-white hover:bg-emerald-500/80 max-md:hidden"
+                )}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: isHovered ? 1 : 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Mic className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} />
+                <span className="text-[10px] font-semibold whitespace-nowrap">Текст</span>
+              </motion.button>
+            )}
+
             {/* Menu button — на мобильных всегда виден, на десктопе при наведении */}
             {onFolderMenuToggle && (
               <motion.button
