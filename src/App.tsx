@@ -10,6 +10,7 @@ import { ProfilePage } from './components/ProfilePage';
 import { Analytics } from './components/Analytics';
 import { UsageStats } from './components/UsageStats';
 import { CarouselEditor } from './components/carousel-editor/CarouselEditor';
+import { RiriChat } from './components/RiriChat';
 import { IncomingVideosDrawer } from './components/sidebar/IncomingVideosDrawer';
 import { SearchPanel, HIDE_SEARCH_BY_WORD } from './components/ui/SearchPanel';
 import { ProjectMembersModal } from './components/ui/ProjectMembersModal';
@@ -880,7 +881,7 @@ function AppContent() {
       />
 
       {/* Toast notifications */}
-      <Toaster 
+      <Toaster
         position="bottom-center"
         toastOptions={{
           style: {
@@ -893,6 +894,9 @@ function AppContent() {
           className: 'safe-bottom',
         }}
       />
+
+      {/* RiRi AI Assistant */}
+      <RiriChat />
     </div>
   );
 }
