@@ -670,7 +670,7 @@ function AppContent() {
                 />
                 <SidebarLink
                   icon={<ImageIcon className="w-4 h-4" strokeWidth={2.5} />}
-                  label="Конструктор"
+                  label="ИИ-Карусели"
                   onClick={() => setViewMode('carousel-editor')}
                   isActive={viewMode === 'carousel-editor'}
                 />
