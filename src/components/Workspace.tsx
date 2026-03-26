@@ -790,6 +790,7 @@ export function Workspace(_props?: WorkspaceProps) {
       links: (selectedVideo as any).links,
       responsibles: (selectedVideo as any).responsibles,
       is_manual: !!(selectedVideo as any).is_manual || isScriptOnlyFeedCard(selectedVideo),
+      caption: (selectedVideo as any).caption,
     },
     onBack: () => { setSelectedVideo(null); setAutoTranscribeVideoId(null); },
     onRefreshData: async () => { await refetchInboxVideos(); },
