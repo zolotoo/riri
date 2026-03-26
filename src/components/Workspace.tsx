@@ -1313,7 +1313,7 @@ export function Workspace(_props?: WorkspaceProps) {
           {contentSection === 'reels' && (
           <>
           {/* Header — glass bar, на мобильных кнопка папок справа */}
-          <div className="mb-6 md:mb-8 rounded-2xl md:rounded-card-xl bg-white/72 backdrop-blur-glass-xl shadow-glass border border-white/55 px-4 py-4 md:px-6 md:py-5 overflow-hidden">
+          <div className="mb-6 md:mb-8 rounded-2xl md:rounded-card-xl bg-white/72 backdrop-blur-glass-xl shadow-glass border border-white/55 px-4 py-4 md:px-6 md:py-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-5">
               <div className="flex items-center justify-between md:justify-start gap-3 flex-shrink-0 min-w-0">
                 <div className="flex items-center gap-3 min-w-0">
