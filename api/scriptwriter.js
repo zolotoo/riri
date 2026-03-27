@@ -1048,7 +1048,7 @@ async function handleAnalyzeCarousel(req, res) {
   }
 
   // ── Шаг 2: генерируем фон через OpenRouter gemini-2.5-flash-image ───────
-  // Ключевые условия: modalities: ["text","image"], stream: false, читать из message.images
+  // OpenRouter всегда стримит для image-моделей — читаем SSE и собираем финальный чанк
   try {
     const imgGenRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -1060,8 +1060,8 @@ async function handleAnalyzeCarousel(req, res) {
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash-image',
-        modalities: ['text', 'image'],
-        stream: false,
+        modalities: ['image', 'text'],
+        stream: true,
         messages: [{
           role: 'user',
           content: [
@@ -1071,19 +1071,60 @@ async function handleAnalyzeCarousel(req, res) {
         }],
       }),
     });
-    const imgGenData = await imgGenRes.json();
-    console.log('Gemini image gen status:', imgGenRes.status, JSON.stringify(imgGenData).slice(0, 500));
 
-    // Изображение приходит в message.images, а не в message.content
-    const images = imgGenData?.choices?.[0]?.message?.images;
-    if (images && images.length > 0) {
-      const imageUrl = images[0]?.image_url?.url;
-      if (imageUrl) {
-        parsed.background = { type: 'image', src: imageUrl };
-        console.log('Gemini: background generated OK');
-      }
+    console.log('Gemini image gen HTTP status:', imgGenRes.status);
+
+    // Читаем SSE-поток и собираем все чанки
+    const rawText = await imgGenRes.text();
+    const lines = rawText.split('\n');
+
+    // Собираем base64-данные изображения из всех delta-чанков
+    let base64Chunks = [];
+    let imageMime = 'image/png';
+    let lastChunk = null;
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+      try {
+        const chunk = JSON.parse(line.slice(6));
+        lastChunk = chunk;
+        const delta = chunk?.choices?.[0]?.delta;
+        // Вариант 1: изображение в delta.images
+        if (delta?.images?.length > 0) {
+          const url = delta.images[0]?.image_url?.url;
+          if (url?.startsWith('data:')) {
+            const [meta, b64] = url.split(',');
+            const mime = meta.replace('data:', '').replace(';base64', '');
+            if (mime) imageMime = mime;
+            if (b64) base64Chunks.push(b64);
+          }
+        }
+        // Вариант 2: изображение в delta.content как массив
+        if (Array.isArray(delta?.content)) {
+          for (const part of delta.content) {
+            if (part?.type === 'image_url' && part?.image_url?.url) {
+              const url = part.image_url.url;
+              if (url.startsWith('data:')) {
+                const [meta, b64] = url.split(',');
+                const mime = meta.replace('data:', '').replace(';base64', '');
+                if (mime) imageMime = mime;
+                if (b64) base64Chunks.push(b64);
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    console.log('Gemini SSE chunks:', lines.filter(l => l.startsWith('data:')).length, '| base64 parts:', base64Chunks.length, '| last chunk keys:', lastChunk ? Object.keys(lastChunk) : null);
+
+    if (base64Chunks.length > 0) {
+      const fullBase64 = base64Chunks.join('');
+      parsed.background = { type: 'image', src: `data:${imageMime};base64,${fullBase64}` };
+      console.log('Gemini: background generated OK, base64 length:', fullBase64.length);
     } else {
-      console.warn('Gemini image gen: no image in response', JSON.stringify(imgGenData).slice(0, 500));
+      // Логируем для диагностики
+      console.warn('Gemini image gen: no image found. Raw preview:', rawText.slice(0, 800));
     }
   } catch (err) {
     console.error('Gemini image gen error:', err.message);
