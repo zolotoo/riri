@@ -1010,9 +1010,9 @@ async function handleAnalyzeCarousel(req, res) {
 
   // Модели с поддержкой vision (по приоритету)
   const VISION_MODELS = [
-    'google/gemini-2.0-flash-001',
+    'google/gemini-2.5-pro-preview',
     'google/gemini-2.5-flash-preview',
-    'google/gemini-2.0-flash-lite-001',
+    'google/gemini-2.0-flash-001',
   ];
 
   const messages = [

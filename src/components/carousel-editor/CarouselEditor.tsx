@@ -381,6 +381,31 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
           return [];
         });
 
+        // ── Smart post-processing ──────────────────────────────────────
+        // Центрируем pill-кнопки (rect с большим borderRadius) и текст внутри них
+        newSlide.elements = newSlide.elements.map((el) => {
+          if (el.type !== 'shape') return el;
+          const s = el as import('./types').ShapeElement;
+          if (s.shapeType !== 'rect' || s.borderRadius < 30) return el;
+          // Это pill/oval — центрируем горизонтально
+          const centeredX = Math.max(0, (100 - s.size.width) / 2);
+          return { ...s, position: { ...s.position, x: centeredX } };
+        }).map((el) => {
+          if (el.type !== 'text') return el;
+          const t = el as import('./types').TextElement;
+          // Ищем pill-shape на том же уровне по Y (±15%)
+          const pill = newSlide.elements.find((e) => {
+            if (e.type !== 'shape') return false;
+            const s = e as import('./types').ShapeElement;
+            return s.shapeType === 'rect' && s.borderRadius >= 30
+              && Math.abs(s.position.y - t.position.y) < 15;
+          }) as import('./types').ShapeElement | undefined;
+          if (!pill) return el;
+          // Текст внутри pill — центрируем
+          const pillCenterX = pill.position.x + pill.size.width / 2;
+          return { ...t, position: { ...t.position, x: Math.max(0, pillCenterX - t.width / 2) }, textAlign: 'center' as const };
+        });
+
         onDone([newSlide], { base64, mimeType });
       } catch (err) {
         console.error('AI analyze error:', err);
@@ -1373,6 +1398,26 @@ function TextPropsPanel({ el, onUpdate }: { el: TextElement; onUpdate: (u: Parti
         <input
           type="range" min={20} max={95} value={el.width}
           onChange={(e) => onUpdate({ width: Number(e.target.value) })}
+          className="w-full h-1 accent-slate-600"
+        />
+      </div>
+
+      {/* Line height */}
+      <div className="space-y-1">
+        <p className="text-[11px] text-slate-400">Межстрочный интервал: {(el.lineHeight ?? 1.3).toFixed(1)}</p>
+        <input
+          type="range" min={0.8} max={2.0} step={0.1} value={el.lineHeight ?? 1.3}
+          onChange={(e) => onUpdate({ lineHeight: Number(e.target.value) })}
+          className="w-full h-1 accent-slate-600"
+        />
+      </div>
+
+      {/* Letter spacing */}
+      <div className="space-y-1">
+        <p className="text-[11px] text-slate-400">Межбуквенный интервал: {(el.letterSpacing ?? 0).toFixed(2)}</p>
+        <input
+          type="range" min={-0.05} max={0.3} step={0.01} value={el.letterSpacing ?? 0}
+          onChange={(e) => onUpdate({ letterSpacing: Number(e.target.value) })}
           className="w-full h-1 accent-slate-600"
         />
       </div>
