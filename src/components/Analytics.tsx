@@ -1285,7 +1285,7 @@ export function Analytics() {
     loadAnalytics, loadProjectConfig, setInstagramUsername, syncReels,
     getReelSnapshots, buildChartData,
   } = useProjectAnalytics(currentProjectId);
-  const { stats: responsiblesStats, byRole } = useResponsiblesStats(currentProjectId, reels);
+  const { stats: responsiblesStats } = useResponsiblesStats(currentProjectId, reels);
   const folderIdsForRefs = (currentProject?.folders ?? []).map(f => f.id);
   const { refs, linkedShortcodes, refetch: refetchRefsForLinking } = useRefsForLinking(currentProjectId, folderIdsForRefs);
   const { updateVideoShortcode, updateVideoResponsible } = useInboxVideos();
@@ -1428,7 +1428,7 @@ export function Analytics() {
         {subView === 'overview' && <GreySphere size={40} />}
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            {subView === 'overview' ? 'Аналитика' : subView === 'reels' ? 'Все ролики' : subView === 'charts' ? 'Графики' : 'По ответственным'}
+            {subView === 'overview' ? 'Аналитика' : subView === 'reels' ? 'Все ролики' : subView === 'charts' ? 'Графики' : 'Аналитика по команде'}
           </h1>
           {subView === 'overview' && instagramUsername && (
             <button onClick={() => setShowSetupModal(true)}
@@ -1650,7 +1650,14 @@ export function Analytics() {
   // ── SUB-VIEW: RESPONSIBLES ─────────────────────────────────────────────═
   // ══════════════════════════════════════════════════════════════════════════
   if (subView === 'responsibles') {
-    const roles = [...byRole.keys()];
+    // Группировка по людям: person → список ролей со статистикой
+    const byPerson = new Map<string, typeof responsiblesStats>();
+    for (const s of responsiblesStats) {
+      const list = byPerson.get(s.person) || [];
+      list.push(s);
+      byPerson.set(s.person, list);
+    }
+    const persons = [...byPerson.keys()];
 
     const handleLinkRefToReel = async (refId: string, shortcode: string) => {
       const ok = await updateVideoShortcode(refId, shortcode);
@@ -1873,53 +1880,74 @@ export function Analytics() {
             );
           })()}
 
-          {responsiblesStats.length === 0 ? (
+          {persons.length === 0 ? (
             <div className={cn(CARD, 'p-8 text-center')}>
               <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-[15px] font-medium text-slate-600">Нет данных по ответственным</p>
+              <p className="text-[15px] font-medium text-slate-600">Нет данных по команде</p>
               <p className="text-[13px] text-slate-400 mt-1">
-                Добавь ролики в папки и укажи ответственных в карточках
+                Укажи ответственных в карточках видео — здесь появится статистика по каждому
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {roles.map(role => (
-                <div key={role} className={cn(CARD, 'p-4')}>
-                  <p className="text-[13px] font-semibold text-slate-700 mb-3">{role}</p>
-                  <div className="space-y-2">
-                    {byRole.get(role)!.map((s, i) => (
-                      <div key={`${s.person}-${i}`} className="rounded-xl bg-slate-50 px-3 py-2.5">
-                        {/* Имя */}
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[14px] font-semibold text-slate-800">{s.person}</span>
-                          {s.views > 0 && (
-                            <span className="text-[15px] font-bold text-slate-900 tabular-nums">{fmt(s.views)}</span>
-                          )}
-                        </div>
-                        {/* Статистика */}
-                        <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-medium text-slate-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />
-                            {s.assignedCount} {s.assignedCount === 1 ? 'видео' : s.assignedCount < 5 ? 'видео' : 'видео'} в работе
-                          </span>
-                          {s.linksFilledCount > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-[11px] font-medium text-emerald-600">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                              {s.linksFilledCount} ссылок заполнено
-                            </span>
-                          )}
-                          {s.reelsCount > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-medium text-slate-500">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
-                              {s.reelsCount} опубл.
-                            </span>
-                          )}
-                        </div>
+            <div className="space-y-4">
+              {persons.map(person => {
+                const personStats = byPerson.get(person)!;
+                const totalAssigned = personStats.reduce((s, r) => s + r.assignedCount, 0);
+                const totalLinked = personStats.reduce((s, r) => s + r.linksFilledCount, 0);
+                const totalViews = personStats.reduce((s, r) => s + r.views, 0);
+                const initials = person.replace('@', '').slice(0, 2).toUpperCase();
+                return (
+                  <div key={person} className={cn(CARD, 'p-4')}>
+                    {/* Имя + суммарные просмотры */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {initials}
                       </div>
-                    ))}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-slate-800 truncate">{person}</p>
+                        <p className="text-[11px] text-slate-400">{totalAssigned} видео в работе</p>
+                      </div>
+                      {totalViews > 0 && (
+                        <span className="text-[15px] font-bold text-slate-900 tabular-nums">{fmt(totalViews)}</span>
+                      )}
+                    </div>
+                    {/* Строки по ролям */}
+                    <div className="space-y-1.5">
+                      {personStats.map((s, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-slate-50">
+                          <span className="text-[12px] text-slate-500 font-medium">{s.role}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[12px] text-slate-600">
+                              <span className="font-semibold text-indigo-600">{s.assignedCount}</span> назначен
+                            </span>
+                            {s.linksFilledCount > 0 && (
+                              <span className="text-[12px] text-slate-600">
+                                <span className="font-semibold text-emerald-600">{s.linksFilledCount}</span> ссылок
+                              </span>
+                            )}
+                            {s.reelsCount > 0 && (
+                              <span className="text-[12px] text-slate-400">{s.reelsCount} опубл.</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Итоговые бейджи */}
+                    {totalLinked > 0 && (
+                      <div className="flex gap-2 mt-2.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-700">
+                          ✓ {totalLinked} ссылок заполнено
+                        </span>
+                        {totalLinked < totalAssigned && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-medium text-amber-700">
+                            ⏳ {totalAssigned - totalLinked} без ссылки
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
