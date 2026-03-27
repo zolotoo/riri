@@ -1033,56 +1033,51 @@ async function handleAnalyzeCarousel(req, res) {
     return res.status(502).json({ error: lastErr?.message ?? 'Vision API error' });
   }
 
-  // ── Шаг 2: если фон — фото/текстура, генерируем через Gemini Image Generation ──
-  console.log('Background type detected:', parsed.background?.type, JSON.stringify(parsed.background).slice(0, 100));
-  if (parsed.background?.type === 'image') {
-    try {
-      // Шаг 1: Gemini Vision анализирует и даёт точное описание фона с hex-цветами
-      let bgDescription = null;
-      for (const model of VISION_MODELS) {
-        try {
-          const { text: desc } = await callOpenRouter({
-            apiKey: OPENROUTER_API_KEY,
-            model,
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
-                { type: 'text', text: `Analyze the background of this image (ignore all text, UI, overlays).
+  // ── Шаг 2: всегда генерируем фон через Gemini Image ──────────────────────────
+  // Независимо от типа (solid/gradient/image) — всегда создаём через ИИ.
+  // Если не получится — фронт покажет solid-цвет из шага 1.
+  try {
+    // Описываем фон для генерации
+    let bgDescription = null;
+    for (const model of VISION_MODELS) {
+      try {
+        const { text: desc } = await callOpenRouter({
+          apiKey: OPENROUTER_API_KEY,
+          model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
+              { type: 'text', text: `Analyze the background of this carousel image (ignore all text, UI elements, overlays).
 
-Return a JSON object:
+Return JSON:
 {
-  "type": "texture" or "photo",
-  "description": "precise visual description for image generation",
-  "dominant_color": "#hexcode",
-  "secondary_color": "#hexcode or null"
+  "bg_type": "texture" or "photo",
+  "description": "precise English description for image generation (colors with hex, material, texture density, lighting)"
 }
 
-"type":"texture" = grain, noise, paper, fabric, concrete, wall surface (no people, no recognizable objects)
-"type":"photo" = real photographic scene: people, room, nature, objects
-
-For "description": be very literal and specific — exact colors, texture density, lighting. Example for grain: "Uniform light warm gray surface (#d9d6d0) with fine photographic film grain and subtle noise. Matte, slightly rough texture. Even lighting, no shadows."
+"texture" = any surface without recognizable real-world objects: grain, noise, paper, fabric, concrete, gradient+grain, painted wall
+"photo" = real photographic scene: people, room, street, nature, objects
 
 Return ONLY the JSON.` },
-              ],
-            }],
-            temperature: 0.1,
-            max_tokens: 200,
-          });
-          if (desc?.trim()) {
-            const bgData = parseJsonResponse(desc);
-            if (bgData?.description) { bgDescription = bgData; break; }
-          }
-        } catch (e) { /* try next */ }
-      }
+            ],
+          }],
+          temperature: 0.1,
+          max_tokens: 150,
+        });
+        if (desc?.trim()) {
+          const d = parseJsonResponse(desc);
+          if (d?.description) { bgDescription = d; break; }
+        }
+      } catch (e) { /* try next model */ }
+    }
 
-      if (!bgDescription) throw new Error('Could not analyze background');
-      console.log('Background analysis:', JSON.stringify(bgDescription));
+    console.log('BG description:', JSON.stringify(bgDescription));
 
-      // Шаг 2: генерируем фон через Gemini Image (text-to-image)
-      const genPrompt = bgDescription.type === 'texture'
-        ? `Generate a seamless abstract ${bgDescription.description}. Fill the entire frame with this texture. Absolutely no text, no words, no numbers, no people, no objects, no UI. Only the raw surface material.`
-        : `Generate a photographic scene: ${bgDescription.description}. No text, no captions, no UI overlays, no graphic elements. Real photo composition only.`;
+    if (bgDescription) {
+      const genPrompt = bgDescription.bg_type === 'photo'
+        ? `Photographic scene: ${bgDescription.description}. No text, no captions, no UI elements. Real photo only.`
+        : `Seamless surface texture: ${bgDescription.description}. Fill entire frame. No text, no words, no people, no objects. Pure material/texture only.`;
 
       const genRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -1107,9 +1102,10 @@ Return ONLY the JSON.` },
       if (imgItem?.image_url?.url) {
         parsed.background = { type: 'image', src: imgItem.image_url.url };
       }
-    } catch (err) {
-      console.error('Gemini image gen error:', err.message);
     }
+  } catch (err) {
+    console.error('Gemini image gen error:', err.message);
+    // fallback: оставляем solid/gradient из шага 1
   }
 
   return res.status(200).json(parsed);
