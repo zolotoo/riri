@@ -237,9 +237,7 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
         let resolvedBg: import('./types').SlideBackground;
         if (background?.type === 'image' && background.src) {
           resolvedBg = { type: 'image', src: background.src };
-        } else if (!background || background.type === 'image') {
-          resolvedBg = { type: 'image', src: `data:${mimeType};base64,${base64}` };
-        } else if (background.type === 'gradient' && background.from && background.to) {
+        } else if (background?.type === 'gradient' && background.from && background.to) {
           resolvedBg = { type: 'gradient', from: background.from, to: background.to, direction: background.direction ?? 'to bottom' };
         } else {
           resolvedBg = { type: 'solid', color: background.color ?? '#f5f5f4' };
