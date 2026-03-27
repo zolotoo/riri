@@ -1045,7 +1045,7 @@ async function handleAnalyzeCarousel(req, res) {
           'X-Title': 'RiRi AI',
         },
         body: JSON.stringify({
-          model: 'google/gemini-3.1-flash-image-preview',
+          model: 'google/gemini-2.5-flash-image',
           modalities: ['image', 'text'],
           image_config: { aspect_ratio: '3:4' },
           messages: [{
@@ -1061,12 +1061,22 @@ async function handleAnalyzeCarousel(req, res) {
       const genData = await genRes.json();
       console.log('Gemini image edit status:', genRes.status, JSON.stringify(genData).slice(0, 400));
 
-      const imgItem = genData?.choices?.[0]?.message?.images?.[0];
-      if (imgItem?.image_url?.url) {
-        parsed.background = { type: 'image', src: imgItem.image_url.url };
+      // Проверяем все возможные форматы ответа OpenRouter с изображением
+      const msg = genData?.choices?.[0]?.message;
+      let imgUrl = msg?.images?.[0]?.image_url?.url;
+      if (!imgUrl && Array.isArray(msg?.content)) {
+        const imgPart = msg.content.find(p => p.type === 'image_url');
+        imgUrl = imgPart?.image_url?.url;
+      }
+      if (!imgUrl && typeof msg?.content === 'string' && msg.content.startsWith('data:image')) {
+        imgUrl = msg.content;
+      }
+
+      if (imgUrl) {
+        parsed.background = { type: 'image', src: imgUrl };
         console.log('Gemini image edit: background generated successfully');
       } else {
-        console.warn('Gemini image edit: no image in response', JSON.stringify(genData).slice(0, 400));
+        console.warn('Gemini image edit: no image in response', JSON.stringify(genData).slice(0, 500));
       }
     } catch (err) {
       console.error('Gemini image edit error:', err.message);
