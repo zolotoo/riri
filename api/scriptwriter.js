@@ -1035,8 +1035,6 @@ async function handleAnalyzeCarousel(req, res) {
 
   // ── Шаг 2: если фон — фото/текстура, генерируем новое изображение ──────────
   if (parsed.background?.type === 'image') {
-    const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
-
     // 2a. Gemini описывает фон для генерации
     let bgGenPrompt = null;
     const descPrompt = `Look at this carousel image. Ignore ALL text, logos, icons, UI elements, and people in the foreground. Focus ONLY on the background layer.
@@ -1067,44 +1065,48 @@ Reply with only the prompt text, no explanations.`;
       }
     }
 
-    // 2b. Генерируем фоновое изображение через Together AI FLUX
-    if (bgGenPrompt && TOGETHER_API_KEY) {
+    // 2b. Генерируем фоновое изображение через OpenRouter FLUX
+    if (bgGenPrompt) {
       try {
-        const genRes = await fetch('https://api.together.xyz/v1/images/generations', {
+        const genRes = await fetch('https://openrouter.ai/api/v1/images/generations', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${TOGETHER_API_KEY}`,
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://ririrai.vercel.app',
           },
           body: JSON.stringify({
-            model: 'black-forest-labs/FLUX.1-schnell-Free',
-            prompt: bgGenPrompt + ', no text, no people, background only, high quality',
-            width: 768,
-            height: 1024,
-            steps: 4,
+            model: 'black-forest-labs/flux-1-schnell',
+            prompt: bgGenPrompt + ', no text, no watermarks, no people, background only, high quality',
             n: 1,
-            response_format: 'b64_json',
+            size: '1024x1024',
           }),
         });
 
         if (genRes.ok) {
           const genData = await genRes.json();
-          const b64 = genData?.data?.[0]?.b64_json;
-          if (b64) {
-            parsed.background = { type: 'image', src: `data:image/png;base64,${b64}` };
+          // OpenRouter возвращает URL или b64_json
+          const item = genData?.data?.[0];
+          if (item?.b64_json) {
+            parsed.background = { type: 'image', src: `data:image/png;base64,${item.b64_json}` };
+          } else if (item?.url) {
+            // Скачиваем и конвертируем в base64 чтобы не зависеть от временного URL
+            const imgRes = await fetch(item.url);
+            if (imgRes.ok) {
+              const buf = await imgRes.arrayBuffer();
+              const b64 = Buffer.from(buf).toString('base64');
+              const ct = imgRes.headers.get('content-type') || 'image/png';
+              parsed.background = { type: 'image', src: `data:${ct};base64,${b64}` };
+            }
           }
         } else {
           const errText = await genRes.text();
-          console.error('Together AI generation error:', genRes.status, errText);
-          // Fallback: используем загруженный скриншот как фон (фронт сам подставит)
+          console.error('OpenRouter image gen error:', genRes.status, errText);
         }
       } catch (err) {
-        console.error('Together AI generation error:', err.message);
+        console.error('OpenRouter image gen error:', err.message);
         // Fallback: фронт подставит скриншот
       }
-    } else if (!TOGETHER_API_KEY) {
-      console.warn('TOGETHER_API_KEY not set — background image generation skipped');
-      // Фронт подставит скриншот как fallback
     }
   }
 
