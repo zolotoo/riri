@@ -1033,44 +1033,44 @@ async function handleAnalyzeCarousel(req, res) {
     return res.status(502).json({ error: lastErr?.message ?? 'Vision API error' });
   }
 
-  // ── Шаг 2: редактируем оригинал через Google AI API (gemini-2.0-flash-exp) ──────────────
-  // OpenRouter не отдаёт image output — используем Google AI напрямую
-  const GOOGLE_AI_KEY = process.env.GOOGLE_AI_API_KEY;
-  if (GOOGLE_AI_KEY) {
+  // ── Шаг 2: если фон — фото/текстура, редактируем через Gemini Image (OpenRouter) ──────
+  if (parsed.background?.type === 'image') {
     try {
-      const googleRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_AI_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { inlineData: { mimeType: mime_type, data: image_data } },
-                { text: 'I attached a photo. Delete from it all text, photo blocks, dots, icons, buttons, UI elements, watermarks — everything except the background.\n\nKeep the background exactly as-is. Preserve the exact color, texture, palette, grain, lighting — pixel-perfect identical.\n\nIf the background is a photo of a person or scene — recreate that exact photo.\n\nOutput the image in 3:4 aspect ratio (portrait). Return only the cleaned background image, nothing else.' },
-              ],
-            }],
-            generationConfig: { responseModalities: ['IMAGE'] },
-          }),
-        }
-      );
+      const genRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://ririrai.vercel.app',
+          'X-Title': 'RiRi AI',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-image',
+          modalities: ['image', 'text'],
+          image_config: { aspect_ratio: '3:4' },
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
+              { type: 'text', text: 'I attached a photo. Delete from it all text, photo blocks, dots, icons, buttons, UI elements, watermarks — everything except the background.\n\nKeep the background exactly as-is. Preserve the exact color, texture, palette, grain, lighting — pixel-perfect identical.\n\nIf the background is a photo of a person or scene — recreate that exact photo without any overlays.\n\nOutput the image in 3:4 aspect ratio (portrait). Return only the cleaned background image, nothing else.' },
+            ],
+          }],
+        }),
+      });
 
-      const googleData = await googleRes.json();
-      console.log('Google AI image edit status:', googleRes.status, JSON.stringify(googleData).slice(0, 400));
+      const genData = await genRes.json();
+      console.log('Gemini image edit status:', genRes.status, JSON.stringify(genData).slice(0, 400));
 
-      const imgPart = googleData?.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data);
-      if (imgPart?.inlineData?.data) {
-        const ct = imgPart.inlineData.mimeType || 'image/png';
-        parsed.background = { type: 'image', src: `data:${ct};base64,${imgPart.inlineData.data}` };
-        console.log('Google AI: background image generated successfully');
+      const imgItem = genData?.choices?.[0]?.message?.images?.[0];
+      if (imgItem?.image_url?.url) {
+        parsed.background = { type: 'image', src: imgItem.image_url.url };
+        console.log('Gemini image edit: background generated successfully');
       } else {
-        console.warn('Google AI: no image in response', JSON.stringify(googleData).slice(0, 400));
+        console.warn('Gemini image edit: no image in response', JSON.stringify(genData).slice(0, 400));
       }
     } catch (err) {
-      console.error('Google AI image edit error:', err.message);
+      console.error('Gemini image edit error:', err.message);
     }
-  } else {
-    console.warn('GOOGLE_AI_API_KEY not set — skipping background generation');
   }
 
   return res.status(200).json(parsed);
