@@ -1045,7 +1045,7 @@ async function handleAnalyzeCarousel(req, res) {
           'X-Title': 'RiRi AI',
         },
         body: JSON.stringify({
-          model: 'google/gemini-3.1-flash-image-preview',
+          model: 'google/gemini-2.5-flash-image',
           modalities: ['image', 'text'],
           image_config: { aspect_ratio: '3:4' },
           messages: [{
