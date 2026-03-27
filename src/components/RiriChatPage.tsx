@@ -8,6 +8,9 @@ interface Message {
   content: string;
 }
 
+const STORAGE_KEY = (userId: string) => `riri_chat_${userId}`;
+const MAX_STORED = 60;
+
 const iosSpringSoft = { type: 'spring' as const, stiffness: 340, damping: 32 };
 
 const msgAnim = {
@@ -40,9 +43,21 @@ function RiriOrb({ size = 48, floating = false, className }: { size?: number; fl
   );
 }
 
+// ─── Streaming cursor ─────────────────────────────────────────────────────────
+
+function StreamingCursor() {
+  return (
+    <motion.span
+      className="inline-block w-[2px] h-[15px] bg-slate-400 rounded-full ml-[2px] align-middle"
+      animate={{ opacity: [1, 0, 1] }}
+      transition={{ duration: 0.7, repeat: Infinity, ease: 'easeInOut' }}
+    />
+  );
+}
+
 // ─── Bubbles ──────────────────────────────────────────────────────────────────
 
-function RiriBubble({ text }: { text: string }) {
+function RiriBubble({ text, streaming }: { text: string; streaming?: boolean }) {
   return (
     <motion.div {...msgAnim} className="flex gap-2.5 items-start max-w-[85%]">
       <RiriOrb size={26} className="mt-0.5 flex-shrink-0" />
@@ -54,7 +69,10 @@ function RiriBubble({ text }: { text: string }) {
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
         }}
       >
-        <p className="text-[15px] text-[#1a1a18] leading-[1.55] whitespace-pre-wrap">{text}</p>
+        <p className="text-[15px] text-[#1a1a18] leading-[1.55] whitespace-pre-wrap">
+          {text}
+          {streaming && <StreamingCursor />}
+        </p>
       </div>
     </motion.div>
   );
@@ -108,7 +126,7 @@ function TypingIndicator() {
 const SUGGESTIONS = [
   'Как создать проект?',
   'Как добавить видео?',
-  'Что такое Лента?',
+  'Как написать сценарий?',
   'Где смотреть аналитику?',
   'Как пригласить команду?',
 ];
@@ -117,23 +135,50 @@ export function RiriChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
+
+  // Загружаем историю из localStorage при монтировании
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY(user.id));
+      if (stored) {
+        const parsed = JSON.parse(stored) as Message[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch { /* игнорируем */ }
+  }, [user?.id]);
+
+  // Сохраняем историю при каждом изменении
+  useEffect(() => {
+    if (!user?.id || messages.length === 0) return;
+    try {
+      const toStore = messages.slice(-MAX_STORED);
+      localStorage.setItem(STORAGE_KEY(user.id), JSON.stringify(toStore));
+    } catch { /* игнорируем */ }
+  }, [messages, user?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, loading]);
+  }, [messages, loading, streamingText]);
 
   const sendMessage = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || loading || !user?.id) return;
 
-    setMessages(prev => [...prev, { role: 'user', content: msg }]);
+    const userMsg: Message = { role: 'user', content: msg };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput('');
     setLoading(true);
+    setStreamingText('');
 
     try {
       const res = await fetch('/api/riri-chat', {
@@ -145,17 +190,63 @@ export function RiriChatPage() {
           history: messages.slice(-10),
         }),
       });
-      const data = await res.json();
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.text || data.error || 'Ой, не получилось ответить. Попробуй ещё раз!',
-      }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Что-то пошло не так. Попробуй ещё раз!' }]);
-    } finally {
+
+      if (!res.ok || !res.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+
       setLoading(false);
+      setStreamingText('');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const chunk = JSON.parse(raw);
+            if (chunk.delta) {
+              fullText += chunk.delta;
+              setStreamingText(fullText);
+            }
+            if (chunk.done || chunk.error) {
+              const finalText = chunk.error
+                ? 'Что-то пошло не так. Попробуй ещё раз.'
+                : fullText;
+              setStreamingText('');
+              setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
+            }
+          } catch { /* битый чанк */ }
+        }
+      }
+
+      // Страховка: если done не пришёл
+      if (fullText && streamingText) {
+        setStreamingText('');
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') return prev;
+          return [...prev, { role: 'assistant', content: fullText }];
+        });
+      }
+    } catch {
+      setLoading(false);
+      setStreamingText('');
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Что-то пошло не так. Попробуй ещё раз.' }]);
     }
-  }, [input, loading, user?.id, messages]);
+  }, [input, loading, user?.id, messages, streamingText]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -164,7 +255,8 @@ export function RiriChatPage() {
     }
   };
 
-  const isWelcome = messages.length === 0 && !loading;
+  const isWelcome = messages.length === 0 && !loading && !streamingText;
+  const isStreaming = streamingText.length > 0;
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#f5f6f8' }}>
@@ -235,12 +327,13 @@ export function RiriChatPage() {
                   : <RiriBubble key={i} text={msg.content} />
               )}
               {loading && <TypingIndicator />}
+              {isStreaming && <RiriBubble text={streamingText} streaming />}
             </div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Input — как в AIScriptwriter */}
+      {/* Input */}
       <div className="px-4 pb-4 pt-2 safe-bottom flex-shrink-0">
         <div
           className="rounded-3xl transition-all"
@@ -257,20 +350,20 @@ export function RiriChatPage() {
             onKeyDown={handleKeyDown}
             placeholder="Спроси что-нибудь..."
             rows={1}
-            disabled={loading}
+            disabled={loading || isStreaming}
             className="w-full resize-none border-0 bg-transparent px-4 pt-3.5 pb-1 text-[15px] text-[#1a1a18] placeholder:text-[#1a1a18]/35 focus:outline-none min-h-[50px] max-h-32 leading-relaxed"
           />
           <div className="flex items-center px-3 pb-3 pt-1">
             <div className="ml-auto">
               <button
                 onClick={() => sendMessage()}
-                disabled={!input.trim() || loading}
+                disabled={!input.trim() || loading || isStreaming}
                 className="w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 disabled:opacity-30"
                 style={{
-                  background: input.trim() && !loading
+                  background: input.trim() && !loading && !isStreaming
                     ? 'linear-gradient(145deg, #1e293b 0%, #0f172a 100%)'
                     : 'rgba(15,23,42,0.12)',
-                  boxShadow: input.trim() && !loading
+                  boxShadow: input.trim() && !loading && !isStreaming
                     ? '0 4px 12px rgba(15,23,42,0.25), inset 0 1px 0 rgba(255,255,255,0.1)'
                     : 'none',
                 }}
