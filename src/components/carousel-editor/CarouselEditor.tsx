@@ -212,7 +212,7 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
         const data = await res.json();
 
         const { background, elements = [] } = data as {
-          background: { type: string; color?: string; from?: string; to?: string; direction?: string };
+          background: { type: string; color?: string; from?: string; to?: string; direction?: string; src?: string };
           elements: Array<{
             type: string; text?: string; x: number; y: number;
             fontSize?: number; fontWeight?: number; color?: string;
@@ -230,9 +230,13 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
           'monospace':    'monospace',
         };
 
-        // Фон: если AI вернул type='image' — используем загруженный скриншот как фон
+        // Фон: API вернул сгенерированное изображение → используем его
+        //      API вернул type='image' без src → fallback на скриншот
+        //      API вернул solid/gradient → используем CSS
         let resolvedBg: import('./types').SlideBackground;
-        if (!background || background.type === 'image') {
+        if (background?.type === 'image' && background.src) {
+          resolvedBg = { type: 'image', src: background.src };
+        } else if (!background || background.type === 'image') {
           resolvedBg = { type: 'image', src: `data:${mimeType};base64,${base64}` };
         } else if (background.type === 'gradient' && background.from && background.to) {
           resolvedBg = { type: 'gradient', from: background.from, to: background.to, direction: background.direction ?? 'to bottom' };

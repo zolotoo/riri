@@ -1033,50 +1033,78 @@ async function handleAnalyzeCarousel(req, res) {
     return res.status(502).json({ error: lastErr?.message ?? 'Vision API error' });
   }
 
-  // ── Шаг 2: если фон — фото/текстура, воссоздаём его через отдельный запрос ──
+  // ── Шаг 2: если фон — фото/текстура, генерируем новое изображение ──────────
   if (parsed.background?.type === 'image') {
-    const bgPrompt = `Посмотри на это изображение карусели. Игнорируй весь текст, иконки и элементы переднего плана. Смотри ТОЛЬКО на фон (задний слой).
+    const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
 
-Воссоздай этот фон максимально точно как CSS. Верни ТОЛЬКО JSON:
+    // 2a. Gemini описывает фон для генерации
+    let bgGenPrompt = null;
+    const descPrompt = `Look at this carousel image. Ignore ALL text, logos, icons, UI elements, and people in the foreground. Focus ONLY on the background layer.
 
-Если фон — однородный цвет или почти однородный:
-{"type":"solid","color":"#точный_hex"}
+Write a concise image generation prompt (2-4 sentences, English) describing ONLY the background: colors, textures, lighting, style, atmosphere, patterns. Do NOT mention any text, overlays, or people. Just the raw background visual.
 
-Если фон — градиент или плавный переход цветов:
-{"type":"gradient","from":"#hex_начало","to":"#hex_конец","direction":"to bottom"}
-
-Если фон — сложная фотография, пейзаж, портрет, сцена (нельзя передать градиентом):
-{"type":"image"}
-
-Верни ТОЛЬКО JSON. Без пояснений.`;
+Reply with only the prompt text, no explanations.`;
 
     for (const model of VISION_MODELS) {
       try {
-        const { text: bgText } = await callOpenRouter({
+        const { text: descText } = await callOpenRouter({
           apiKey: OPENROUTER_API_KEY,
           model,
           messages: [{
             role: 'user',
             content: [
+              // Прикрепляем оригинальное фото — Gemini видит его и описывает фон точнее
               { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
-              { type: 'text', text: bgPrompt },
+              { type: 'text', text: descPrompt },
             ],
           }],
-          temperature: 0.05,
-          max_tokens: 200,
+          temperature: 0.2,
+          max_tokens: 250,
         });
-        if (!bgText) continue;
-        const bgParsed = parseJsonResponse(bgText);
-        if (bgParsed?.type && bgParsed.type !== 'image') {
-          // Заменяем фон результатом второго запроса
-          parsed.background = bgParsed;
-        }
-        // Если вернул type='image' — оставляем как есть, фронт сам подставит скриншот
-        break;
+        if (descText?.trim()) { bgGenPrompt = descText.trim(); break; }
       } catch (err) {
-        console.error(`analyze-carousel step2 bg error with ${model}:`, err.message);
-        if (err.message?.includes('429')) await new Promise(r => setTimeout(r, 1000));
+        console.error(`analyze-carousel step2a error with ${model}:`, err.message);
       }
+    }
+
+    // 2b. Генерируем фоновое изображение через Together AI FLUX
+    if (bgGenPrompt && TOGETHER_API_KEY) {
+      try {
+        const genRes = await fetch('https://api.together.xyz/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${TOGETHER_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'black-forest-labs/FLUX.1-schnell-Free',
+            prompt: bgGenPrompt + ', no text, no people, background only, high quality',
+            width: 768,
+            height: 1024,
+            steps: 4,
+            n: 1,
+            response_format: 'b64_json',
+          }),
+        });
+
+        if (genRes.ok) {
+          const genData = await genRes.json();
+          const b64 = genData?.data?.[0]?.b64_json;
+          if (b64) {
+            parsed.background = { type: 'image', src: `data:image/png;base64,${b64}` };
+          }
+        } else {
+          const errText = await genRes.text();
+          console.error('Together AI generation error:', genRes.status, errText);
+          // Fallback: используем загруженный скриншот как фон (фронт сам подставит)
+        }
+      } catch (err) {
+        console.error('Together AI generation error:', err.message);
+        // Fallback: фронт подставит скриншот
+      }
+    } else if (!TOGETHER_API_KEY) {
+      console.warn('TOGETHER_API_KEY not set — background image generation skipped');
+      // Фронт подставит скриншот как fallback
     }
   }
 
