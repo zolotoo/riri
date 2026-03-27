@@ -980,9 +980,9 @@ async function handleAnalyzeCarousel(req, res) {
 Правила для текстовых элементов:
 - Точно скопируй текст (важно!).
 - x, y — координаты верхнего левого угла в % от размера слайда (0-90).
-- fontSize — как если бы слайд 1080px шириной (диапазон 24-160).
-- fontWeight: 400 (обычный) или 700 (жирный).
-- fontFamily: "serif" если шрифт с засечками (Playfair, Times, Georgia-style), "sans-serif" если без засечек (Inter, Helvetica-style), "display" если декоративный/капительный (Bebas Neue, Impact-style), "italic-serif" если курсивный с засечками.
+- fontSize — как если бы слайд 1080px шириной (диапазон 24-200). Для огромных заголовков типа "Claude" используй 140-200.
+- fontWeight: 400 (обычный), 700 (жирный), 900 (ультражирный/black — для огромных заголовков типа "Claude", "Nike", когда буквы очень толстые и массивные).
+- fontFamily: "serif" если шрифт с засечками (Playfair, Times, Georgia-style), "sans-serif" если без засечек средней толщины (Inter, Helvetica-style), "heavy-sans" если это очень толстый/тяжёлый sans-serif (Montserrat Black, Futura Bold, когда текст огромный и ultra-bold), "display" если декоративный/капительный/condensed (Bebas Neue, Impact-style — обычно ALL CAPS), "italic-serif" если курсивный с засечками.
 - fontStyle: "italic" если текст наклонённый/курсивный, иначе "normal".
 - rotation: угол наклона в градусах (например -5, 0, 15). 0 если текст прямой.
 - lineHeight: межстрочный интервал (1.0-1.8). Если строки плотно сжаты — 1.0-1.1, обычно — 1.3, широко — 1.6+.

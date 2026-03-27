@@ -315,6 +315,7 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
           'serif':        "'Playfair Display', serif",
           'italic-serif': "'Playfair Display', serif",
           'sans-serif':   'Inter, sans-serif',
+          'heavy-sans':   'Montserrat, sans-serif',
           'display':      "'Bebas Neue', cursive",
           'monospace':    'monospace',
         };
@@ -338,8 +339,8 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
             return [createDefaultTextElement({
               text: el.text ?? 'Текст',
               position: { x: Math.max(0, Math.min(90, el.x ?? 8)), y: Math.max(0, Math.min(90, el.y ?? 8)) },
-              fontSize: Math.max(24, Math.min(160, el.fontSize ?? 48)),
-              fontWeight: el.fontWeight === 400 ? 400 : 700,
+              fontSize: Math.max(24, Math.min(200, el.fontSize ?? 48)),
+              fontWeight: ([400, 700, 800, 900] as number[]).includes(el.fontWeight ?? 0) ? el.fontWeight! : 700,
               color: el.color ?? '#1a1a18',
               textAlign: (['left', 'center', 'right'].includes(el.textAlign ?? '') ? el.textAlign : 'left') as 'left' | 'center' | 'right',
               width: Math.max(20, Math.min(92, el.width ?? 80)),
