@@ -21,7 +21,7 @@ export const SlidePreview = forwardRef<HTMLDivElement, SlidePreviewProps>(
         ref={ref}
         className={cn(
           // Instagram carousel = 1080x1080, we render at fixed aspect ratio
-          'aspect-square w-full select-none overflow-hidden',
+          'aspect-[3/4] w-full select-none overflow-hidden',
           template.bgClass,
           template.textColorClass,
           template.fontClass,

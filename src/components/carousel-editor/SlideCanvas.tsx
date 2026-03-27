@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useEffect, forwardRef } from 'react';
 import { cn } from '../../utils/cn';
-import type { Slide, SlideElement, TextElement, ImageElement } from './types';
+import type { Slide, SlideElement, TextElement, ImageElement, ShapeElement, PlaceholderElement } from './types';
 import { SHADOW_MAP } from './types';
 
 // ─── Shared drag logic ───────────────────────────────────────
@@ -99,12 +99,14 @@ function TextElementView({
         left: `${el.position.x}%`,
         top: `${el.position.y}%`,
         width: `${el.width}%`,
+        cursor: editing ? 'text' : 'text',
       }}
     >
       {/* Drag handle — only when selected and not editing */}
       {selected && !editing && (
         <div
-          className="absolute -top-5 left-0 flex items-center gap-1 cursor-grab active:cursor-grabbing touch-none z-20 select-none"
+          className="absolute -top-5 left-0 flex items-center gap-1 touch-none z-20 select-none"
+          style={{ cursor: 'grab' }}
           onPointerDown={drag.onPointerDown}
           onPointerMove={drag.onPointerMove}
           onPointerUp={drag.onPointerUp}
@@ -138,7 +140,6 @@ function TextElementView({
         suppressContentEditableWarning
         className={cn(
           'outline-none whitespace-pre-wrap break-words',
-          !editing && 'cursor-text',
         )}
         style={{
           fontSize: el.fontSize * scale,
@@ -146,9 +147,11 @@ function TextElementView({
           color: el.color,
           fontStyle: el.fontStyle,
           textAlign: el.textAlign,
+          fontFamily: el.fontFamily ?? 'Inter, sans-serif',
           lineHeight: 1.25,
           minHeight: el.fontSize * scale,
           userSelect: editing ? 'text' : 'none',
+          cursor: editing ? 'text' : 'text',
         }}
         onClick={handleClick}
         onBlur={() => {
@@ -180,6 +183,7 @@ interface ImageElementProps {
 
 function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, containerRef }: ImageElementProps) {
   const drag = useDrag(() => el.position, onMove, containerRef);
+  const [activeDrag, setActiveDrag] = useState(false);
 
   // Resize
   const resizeDragging = useRef(false);
@@ -214,15 +218,16 @@ function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, con
 
   return (
     <div
-      className="absolute touch-none cursor-grab active:cursor-grabbing"
+      className="absolute touch-none"
       style={{
         left: `${el.position.x}%`,
         top: `${el.position.y}%`,
         width: `${el.size.width}%`,
+        cursor: activeDrag ? 'grabbing' : 'grab',
       }}
-      onPointerDown={(e) => { onSelect(); drag.onPointerDown(e); }}
+      onPointerDown={(e) => { onSelect(); setActiveDrag(true); drag.onPointerDown(e); }}
       onPointerMove={drag.onPointerMove}
-      onPointerUp={drag.onPointerUp}
+      onPointerUp={() => { setActiveDrag(false); drag.onPointerUp(); }}
       onClick={handleClick}
     >
       {/* Image */}
@@ -255,7 +260,229 @@ function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, con
       {/* Resize handle */}
       {selected && (
         <div
-          className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 cursor-se-resize touch-none z-10 border-2 border-white"
+          className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 touch-none z-10 border-2 border-white"
+          style={{ cursor: 'se-resize' }}
+          onPointerDown={handleResizeDown}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeUp}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Shape element ───────────────────────────────────────────
+
+interface ShapeElementProps {
+  el: ShapeElement;
+  selected: boolean;
+  scale: number;
+  onSelect: () => void;
+  onMove: (x: number, y: number) => void;
+  onResize: (w: number, h: number) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function ShapeElementView({ el, selected, scale, onSelect, onMove, onResize, containerRef }: ShapeElementProps) {
+  const drag = useDrag(() => el.position, onMove, containerRef);
+  const [activeDrag, setActiveDrag] = useState(false);
+
+  const resizeDragging = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  const handleResizeDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeDragging.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: el.size.width, h: el.size.height };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [el.size]);
+
+  const handleResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!resizeDragging.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - resizeStart.current.x) / rect.width) * 100;
+    const dy = ((e.clientY - resizeStart.current.y) / rect.height) * 100;
+    onResize(
+      Math.max(4, Math.min(90, resizeStart.current.w + dx)),
+      Math.max(4, Math.min(90, resizeStart.current.h + dy)),
+    );
+  }, [onResize, containerRef]);
+
+  const handleResizeUp = useCallback(() => { resizeDragging.current = false; }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!drag.hasMoved.current) onSelect();
+  }, [onSelect, drag.hasMoved]);
+
+  const shapeStyle: React.CSSProperties = {
+    width: '100%',
+    opacity: el.opacity,
+  };
+
+  if (el.shapeType === 'line') {
+    shapeStyle.height = Math.max(el.strokeWidth * scale, 1);
+    shapeStyle.background = el.stroke;
+    shapeStyle.borderRadius = 2;
+  } else {
+    shapeStyle.paddingBottom = `${(el.size.height / el.size.width) * 100}%`;
+    shapeStyle.position = 'relative';
+    shapeStyle.background = el.fill;
+    shapeStyle.border = `${el.strokeWidth * scale}px solid ${el.stroke}`;
+    shapeStyle.borderRadius = el.shapeType === 'circle' ? '50%' : el.borderRadius * scale;
+  }
+
+  return (
+    <div
+      className="absolute touch-none"
+      style={{
+        left: `${el.position.x}%`,
+        top: `${el.position.y}%`,
+        width: `${el.size.width}%`,
+        cursor: activeDrag ? 'grabbing' : 'grab',
+      }}
+      onPointerDown={(e) => { onSelect(); setActiveDrag(true); drag.onPointerDown(e); }}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={() => { setActiveDrag(false); drag.onPointerUp(); }}
+      onClick={handleClick}
+    >
+      <div style={shapeStyle} />
+
+      {/* Selection ring */}
+      {selected && (
+        <div
+          className="absolute inset-0 pointer-events-none rounded-sm"
+          style={{ outline: '2px solid rgba(99,102,241,0.7)', outlineOffset: 2 }}
+        />
+      )}
+
+      {/* Resize handle */}
+      {selected && (
+        <div
+          className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 touch-none z-10 border-2 border-white"
+          style={{ cursor: 'se-resize' }}
+          onPointerDown={handleResizeDown}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeUp}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Placeholder element ─────────────────────────────────────
+
+interface PlaceholderElementProps {
+  el: PlaceholderElement;
+  selected: boolean;
+  scale: number;
+  onSelect: () => void;
+  onMove: (x: number, y: number) => void;
+  onResize: (w: number, h: number) => void;
+  onReplace: (id: string) => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function PlaceholderElementView({ el, selected, scale, onSelect, onMove, onResize, onReplace, containerRef }: PlaceholderElementProps) {
+  const drag = useDrag(() => el.position, onMove, containerRef);
+  const [activeDrag, setActiveDrag] = useState(false);
+
+  const resizeDragging = useRef(false);
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+
+  const handleResizeDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeDragging.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: el.size.width, h: el.size.height };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [el.size]);
+
+  const handleResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!resizeDragging.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - resizeStart.current.x) / rect.width) * 100;
+    const dy = ((e.clientY - resizeStart.current.y) / rect.height) * 100;
+    onResize(
+      Math.max(8, Math.min(90, resizeStart.current.w + dx)),
+      Math.max(8, Math.min(90, resizeStart.current.h + dy)),
+    );
+  }, [onResize, containerRef]);
+
+  const handleResizeUp = useCallback(() => { resizeDragging.current = false; }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!drag.hasMoved.current) {
+      onSelect();
+      onReplace(el.id);
+    }
+  }, [onSelect, onReplace, el.id, drag.hasMoved]);
+
+  return (
+    <div
+      className="absolute touch-none"
+      style={{
+        left: `${el.position.x}%`,
+        top: `${el.position.y}%`,
+        width: `${el.size.width}%`,
+        cursor: activeDrag ? 'grabbing' : 'grab',
+      }}
+      onPointerDown={(e) => { onSelect(); setActiveDrag(true); drag.onPointerDown(e); }}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={() => { setActiveDrag(false); drag.onPointerUp(); }}
+      onClick={handleClick}
+    >
+      {/* Placeholder block */}
+      <div
+        style={{
+          width: '100%',
+          paddingBottom: `${(el.size.height / el.size.width) * 100}%`,
+          borderRadius: el.borderRadius * scale,
+          border: '2px dashed rgba(255,255,255,0.4)',
+          background: 'rgba(0,0,0,0.15)',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}
+        >
+          <svg width={Math.max(16, 24 * scale)} height={Math.max(16, 24 * scale)} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+          <span style={{ fontSize: Math.max(8, 11 * scale), color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 1.2, padding: '0 4px' }}>
+            {el.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Selection ring */}
+      {selected && (
+        <div
+          className="absolute inset-0 pointer-events-none rounded-sm"
+          style={{ outline: '2px solid rgba(99,102,241,0.7)', outlineOffset: 2 }}
+        />
+      )}
+
+      {/* Resize handle */}
+      {selected && (
+        <div
+          className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 touch-none z-10 border-2 border-white"
+          style={{ cursor: 'se-resize' }}
           onPointerDown={handleResizeDown}
           onPointerMove={handleResizeMove}
           onPointerUp={handleResizeUp}
@@ -276,11 +503,12 @@ interface SlideCanvasProps {
   onStopEditText: () => void;
   onUpdateElement: (id: string, updates: Partial<SlideElement>) => void;
   onUpdateTextContent: (id: string, text: string) => void;
+  onReplacePlaceholder: (id: string) => void;
   className?: string;
 }
 
 export const SlideCanvas = forwardRef<HTMLDivElement, SlideCanvasProps>(
-  ({ slide, selectedId, editingTextId, onSelectElement, onStartEditText, onStopEditText, onUpdateElement, onUpdateTextContent, className }, ref) => {
+  ({ slide, selectedId, editingTextId, onSelectElement, onStartEditText, onStopEditText, onUpdateElement, onUpdateTextContent, onReplacePlaceholder, className }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerWidth, setContainerWidth] = useState(540);
 
@@ -314,38 +542,73 @@ export const SlideCanvas = forwardRef<HTMLDivElement, SlideCanvasProps>(
           if (typeof ref === 'function') ref(node);
           else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
         }}
-        className={cn('aspect-square w-full relative overflow-hidden select-none', className)}
+        className={cn('aspect-[3/4] w-full relative overflow-hidden select-none', className)}
         style={{ ...bgStyle, maxWidth: 540 }}
         onClick={() => onSelectElement(null)}
       >
-        {slide.elements.map((el) =>
-          el.type === 'text' ? (
-            <TextElementView
-              key={el.id}
-              el={el}
-              selected={selectedId === el.id}
-              editing={editingTextId === el.id}
-              scale={scale}
-              onSelect={() => onSelectElement(el.id)}
-              onStartEdit={() => onStartEditText(el.id)}
-              onStopEdit={onStopEditText}
-              onTextChange={(text) => onUpdateTextContent(el.id, text)}
-              onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
-              containerRef={containerRef}
-            />
-          ) : (
-            <ImageElementView
-              key={el.id}
-              el={el as ImageElement}
-              selected={selectedId === el.id}
-              scale={scale}
-              onSelect={() => onSelectElement(el.id)}
-              onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
-              onResize={(w, h) => onUpdateElement(el.id, { size: { width: w, height: h } } as Partial<ImageElement>)}
-              containerRef={containerRef}
-            />
-          )
-        )}
+        {slide.elements.map((el) => {
+          if (el.type === 'text') {
+            return (
+              <TextElementView
+                key={el.id}
+                el={el}
+                selected={selectedId === el.id}
+                editing={editingTextId === el.id}
+                scale={scale}
+                onSelect={() => onSelectElement(el.id)}
+                onStartEdit={() => onStartEditText(el.id)}
+                onStopEdit={onStopEditText}
+                onTextChange={(text) => onUpdateTextContent(el.id, text)}
+                onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
+                containerRef={containerRef}
+              />
+            );
+          }
+          if (el.type === 'image') {
+            return (
+              <ImageElementView
+                key={el.id}
+                el={el as ImageElement}
+                selected={selectedId === el.id}
+                scale={scale}
+                onSelect={() => onSelectElement(el.id)}
+                onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
+                onResize={(w, h) => onUpdateElement(el.id, { size: { width: w, height: h } } as Partial<ImageElement>)}
+                containerRef={containerRef}
+              />
+            );
+          }
+          if (el.type === 'shape') {
+            return (
+              <ShapeElementView
+                key={el.id}
+                el={el as ShapeElement}
+                selected={selectedId === el.id}
+                scale={scale}
+                onSelect={() => onSelectElement(el.id)}
+                onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
+                onResize={(w, h) => onUpdateElement(el.id, { size: { width: w, height: h } } as Partial<ShapeElement>)}
+                containerRef={containerRef}
+              />
+            );
+          }
+          if (el.type === 'placeholder') {
+            return (
+              <PlaceholderElementView
+                key={el.id}
+                el={el as PlaceholderElement}
+                selected={selectedId === el.id}
+                scale={scale}
+                onSelect={() => onSelectElement(el.id)}
+                onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
+                onResize={(w, h) => onUpdateElement(el.id, { size: { width: w, height: h } } as Partial<PlaceholderElement>)}
+                onReplace={onReplacePlaceholder}
+                containerRef={containerRef}
+              />
+            );
+          }
+          return null;
+        })}
       </div>
     );
   }

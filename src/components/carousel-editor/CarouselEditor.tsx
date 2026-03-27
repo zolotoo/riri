@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Download, Plus, Trash2,
   ArrowLeft, PenLine, LayoutTemplate, Type, Image as ImageIcon,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
-  Sparkles, Loader2,
+  Loader2, Camera, Sparkles, Box,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { SlideCanvas } from './SlideCanvas';
@@ -13,6 +13,7 @@ import { SlidePreview } from './SlidePreview';
 import type { Slide, SlideElement, SlideBackground, TextElement, ImageElement } from './types';
 import {
   createDefaultSlide, createDefaultTextElement, createDefaultImageElement,
+  createDefaultShapeElement, createDefaultPlaceholderElement,
 } from './types';
 import {
   CAROUSEL_TEMPLATES, createEmptySlidesData, createEmptySlideData,
@@ -34,7 +35,7 @@ function GlassCard({ children, className }: { children: React.ReactNode; classNa
 
 // ─── Mode ────────────────────────────────────────────────────
 
-type EditorMode = 'home' | 'create' | 'template';
+type EditorMode = 'home' | 'create' | 'template' | 'ai-photo';
 
 // ─── Home screen ─────────────────────────────────────────────
 
@@ -62,8 +63,8 @@ function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
           </p>
         </motion.div>
 
-        {/* Cards */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {/* Cards — 1 column */}
+        <div className="grid grid-cols-1 gap-3">
           <motion.button
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -105,6 +106,37 @@ function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
               </p>
             </GlassCard>
           </motion.button>
+
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            onClick={() => onMode('ai-photo')}
+            className="text-left group relative"
+          >
+            <GlassCard className="p-5 transition-all duration-200 hover:shadow-md active:scale-[0.98] touch-manipulation">
+              {/* AI badge */}
+              <div
+                className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[11px] font-bold text-white"
+                style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
+              >
+                ИИ
+              </div>
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center mb-3"
+                style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)' }}
+              >
+                <div className="relative">
+                  <Camera size={20} className="text-indigo-600" />
+                  <Sparkles size={10} className="text-purple-500 absolute -top-1 -right-1" />
+                </div>
+              </div>
+              <p className="text-[15px] font-semibold text-[#1a1a18] mb-1">Создать по фото</p>
+              <p className="text-[13px] text-[#1a1a18]/45 leading-relaxed">
+                Загрузи скриншот — ИИ воспроизведёт дизайн
+              </p>
+            </GlassCard>
+          </motion.button>
         </div>
 
         {/* Tips */}
@@ -117,9 +149,9 @@ function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
             <p className="text-[12px] font-semibold text-[#1a1a18]/40 uppercase tracking-wider mb-3">Как это работает</p>
             <div className="space-y-3">
               {[
-                { n: '1', text: 'Выбери режим — с нуля или по шаблону' },
+                { n: '1', text: 'Выбери режим — с нуля, по шаблону или по фото' },
                 { n: '2', text: 'Добавляй слайды, текст и фото' },
-                { n: '3', text: 'Скачивай готовые PNG 1080×1080' },
+                { n: '3', text: 'Скачивай готовые PNG 1080×1440' },
               ].map((step) => (
                 <div key={step.n} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -133,6 +165,173 @@ function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+// ─── AI Photo screen ─────────────────────────────────────────
+
+function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: Slide[]) => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const [meta, base64] = dataUrl.split(',');
+      const mimeType = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/scriptwriter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'analyze-carousel', image_data: base64, mime_type: mimeType }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+
+        const { background, elements = [] } = data as {
+          background: import('./types').SlideBackground;
+          elements: Array<{
+            type: string; text?: string; x: number; y: number;
+            fontSize?: number; fontWeight?: number; color?: string;
+            textAlign?: string; width?: number;
+            label?: string; borderRadius?: number; height?: number;
+          }>;
+        };
+
+        const newSlide = createDefaultSlide();
+        newSlide.background = background ?? { type: 'solid', color: '#f5f5f4' };
+        newSlide.elements = elements.flatMap((el): SlideElement[] => {
+          if (el.type === 'text') {
+            return [createDefaultTextElement({
+              text: el.text ?? 'Текст',
+              position: { x: Math.max(0, Math.min(90, el.x ?? 8)), y: Math.max(0, Math.min(90, el.y ?? 8)) },
+              fontSize: Math.max(24, Math.min(120, el.fontSize ?? 48)),
+              fontWeight: el.fontWeight === 400 ? 400 : 700,
+              color: el.color ?? '#1a1a18',
+              textAlign: (['left', 'center', 'right'].includes(el.textAlign ?? '') ? el.textAlign : 'left') as 'left' | 'center' | 'right',
+              width: Math.max(20, Math.min(90, el.width ?? 80)),
+            })];
+          }
+          if (el.type === 'placeholder') {
+            return [createDefaultPlaceholderElement({
+              position: { x: Math.max(0, Math.min(90, el.x ?? 10)), y: Math.max(0, Math.min(90, el.y ?? 30)) },
+              size: { width: Math.max(10, Math.min(90, el.width ?? 80)), height: Math.max(5, Math.min(90, el.height ?? 45)) },
+              label: el.label ?? 'Фото',
+              borderRadius: el.borderRadius ?? 16,
+            })];
+          }
+          return [];
+        });
+
+        onDone([newSlide]);
+      } catch (err) {
+        console.error('AI analyze error:', err);
+        setError('Не удалось проанализировать фото. Попробуй другое изображение.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [onDone]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="flex-1 flex flex-col overflow-y-auto px-4 custom-scrollbar-light"
+    >
+      <div className="max-w-2xl mx-auto w-full py-6 space-y-5">
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-[14px] text-[#1a1a18]/50 hover:text-[#1a1a18] transition-colors touch-manipulation"
+          >
+            <ArrowLeft size={16} />
+            Назад
+          </button>
+          <h2 className="text-[17px] font-semibold text-[#1a1a18]">Создать по фото</h2>
+        </div>
+
+        {/* How it works card */}
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)' }}
+            >
+              <div className="relative">
+                <Camera size={18} className="text-indigo-600" />
+                <Sparkles size={9} className="text-purple-500 absolute -top-1 -right-1" />
+              </div>
+            </div>
+            <p className="text-[14px] font-semibold text-[#1a1a18]">Как это работает</p>
+          </div>
+          <div className="space-y-3">
+            {[
+              'Загрузи скриншот карусели (своей или любой другой)',
+              'ИИ анализирует фон, расположение текста и блоки с фото',
+              'Получаешь готовый слайд — полностью редактируемый',
+            ].map((step, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-[11px] font-bold text-indigo-500">{i + 1}</span>
+                </div>
+                <p className="text-[13px] text-[#1a1a18]/60 leading-snug">{step}</p>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Upload button */}
+        <div className="space-y-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className={cn(
+              'w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-[15px] font-medium text-white transition-all active:scale-95 touch-manipulation',
+              loading ? 'bg-slate-400 cursor-wait' : 'bg-slate-600 hover:bg-slate-700',
+            )}
+            style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.15)' }}
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Анализирую...
+              </>
+            ) : (
+              <>
+                <Camera size={16} />
+                Загрузить скриншот
+              </>
+            )}
+          </button>
+
+          {error && (
+            <p className="text-[13px] text-red-500 text-center">{error}</p>
+          )}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
+    </motion.div>
   );
 }
 
@@ -153,18 +352,18 @@ const PRESET_GRADIENTS = [
 
 // ─── Free editor ──────────────────────────────────────────────
 
-function FreeEditor({ onBack }: { onBack: () => void }) {
-  const [slides, setSlides] = useState<Slide[]>([createDefaultSlide()]);
+function FreeEditor({ onBack, initialSlides }: { onBack: () => void; initialSlides?: Slide[] }) {
+  const [slides, setSlides] = useState<Slide[]>(initialSlides ?? [createDefaultSlide()]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
   const [activePanel, setActivePanel] = useState<'add' | 'bg' | 'text' | 'image' | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const bgImageInputRef = useRef<HTMLInputElement>(null);
-  const aiInputRef = useRef<HTMLInputElement>(null);
+  const replacePlaceholderInputRef = useRef<HTMLInputElement>(null);
+  const pendingPlaceholderIdRef = useRef<string | null>(null);
 
   const slide = slides[currentIdx];
 
@@ -265,60 +464,44 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
     reader.readAsDataURL(file);
   }, [onUpdateBackground]);
 
-  const handleAiGenerate = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddShape = useCallback(() => {
+    const el = createDefaultShapeElement();
+    onAddElement(el);
+  }, [onAddElement]);
+
+  const handleReplacePlaceholder = useCallback((id: string) => {
+    pendingPlaceholderIdRef.current = id;
+    replacePlaceholderInputRef.current?.click();
+  }, []);
+
+  const handleReplacePlaceholderFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    const placeholderId = pendingPlaceholderIdRef.current;
+    if (!file || !placeholderId) return;
     e.target.value = '';
 
     const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      const [meta, base64] = dataUrl.split(',');
-      const mimeType = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+    reader.onload = () => {
+      // Find the placeholder to get its position/size
+      const placeholder = slide.elements.find((el) => el.id === placeholderId);
+      if (!placeholder || placeholder.type !== 'placeholder') return;
 
-      setAiLoading(true);
-      setSelectedId(null);
-      try {
-        const res = await fetch('/api/scriptwriter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'analyze-carousel', image_data: base64, mime_type: mimeType }),
-        });
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const data = await res.json();
+      // Replace placeholder with image element keeping same position/size
+      const newEl = createDefaultImageElement(reader.result as string, {
+        position: { ...placeholder.position },
+        size: { ...placeholder.size },
+        borderRadius: placeholder.borderRadius,
+      });
 
-        const { background, elements = [] } = data as {
-          background: import('./types').SlideBackground;
-          elements: Array<{
-            type: string; text: string; x: number; y: number;
-            fontSize: number; fontWeight: number; color: string;
-            textAlign: string; width: number;
-          }>;
-        };
-
-        const newSlide = createDefaultSlide();
-        newSlide.background = background ?? { type: 'solid', color: '#f5f5f4' };
-        newSlide.elements = elements
-          .filter((el) => el.type === 'text')
-          .map((el) => createDefaultTextElement({
-            text: el.text ?? 'Текст',
-            position: { x: Math.max(0, Math.min(90, el.x ?? 8)), y: Math.max(0, Math.min(90, el.y ?? 8)) },
-            fontSize: Math.max(24, Math.min(120, el.fontSize ?? 48)),
-            fontWeight: el.fontWeight === 400 ? 400 : 700,
-            color: el.color ?? '#1a1a18',
-            textAlign: (['left', 'center', 'right'].includes(el.textAlign) ? el.textAlign : 'left') as 'left' | 'center' | 'right',
-            width: Math.max(20, Math.min(90, el.width ?? 80)),
-          }));
-
-        updateSlide(currentIdx, () => newSlide);
-      } catch (err) {
-        console.error('AI generate error:', err);
-      } finally {
-        setAiLoading(false);
-      }
+      updateSlide(currentIdx, (s) => ({
+        ...s,
+        elements: s.elements.map((el) => el.id === placeholderId ? newEl : el),
+      }));
+      setSelectedId(newEl.id);
     };
     reader.readAsDataURL(file);
-  }, [currentIdx, updateSlide]);
+    pendingPlaceholderIdRef.current = null;
+  }, [slide.elements, currentIdx, updateSlide]);
 
   const exportSlides = useCallback(async () => {
     if (!canvasRef.current) return;
@@ -331,8 +514,8 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
         setCurrentIdx(i);
         await new Promise((r) => setTimeout(r, 150));
         const dataUrl = await toPng(canvasRef.current, {
-          width: 1080, height: 1080, pixelRatio: 2,
-          style: { width: '1080px', height: '1080px', maxWidth: '1080px' },
+          width: 1080, height: 1440, pixelRatio: 2,
+          style: { width: '1080px', height: '1440px', maxWidth: '1080px' },
         });
         const link = document.createElement('a');
         link.download = `slide-${i + 1}.png`;
@@ -391,10 +574,10 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
               <button
                 onClick={() => { setCurrentIdx(i); setSelectedId(null); }}
                 className={cn(
-                  'w-14 rounded-xl overflow-hidden border-2 transition-all',
+                  'w-9 rounded-xl overflow-hidden border-2 transition-all',
                   i === currentIdx ? 'border-slate-500 shadow-md' : 'border-transparent hover:border-slate-200',
                 )}
-                style={{ aspectRatio: '1/1' }}
+                style={{ aspectRatio: '3/4' }}
               >
                 <div
                   className="w-full h-full flex items-center justify-center"
@@ -419,7 +602,8 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
           {slides.length < 10 && (
             <button
               onClick={addSlide}
-              className="w-14 h-14 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-400 flex items-center justify-center transition-colors touch-manipulation"
+              className="w-9 rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-400 flex items-center justify-center transition-colors touch-manipulation"
+              style={{ aspectRatio: '3/4' }}
             >
               <Plus size={16} className="text-slate-400" />
             </button>
@@ -436,7 +620,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
                 key={s.id}
                 onClick={() => { setCurrentIdx(i); setSelectedId(null); }}
                 className={cn(
-                  'flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border-2 transition-all',
+                  'flex-shrink-0 w-9 h-12 rounded-xl overflow-hidden border-2 transition-all',
                   i === currentIdx ? 'border-slate-500' : 'border-transparent',
                 )}
                 style={s.background.type === 'solid' ? { backgroundColor: s.background.color } :
@@ -448,7 +632,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
             {slides.length < 10 && (
               <button
                 onClick={addSlide}
-                className="flex-shrink-0 w-12 h-12 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center"
+                className="flex-shrink-0 w-9 h-12 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center"
               >
                 <Plus size={14} className="text-slate-400" />
               </button>
@@ -471,6 +655,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
                 onStopEditText={() => setEditingTextId(null)}
                 onUpdateElement={onUpdateElement}
                 onUpdateTextContent={onUpdateTextContent}
+                onReplacePlaceholder={handleReplacePlaceholder}
               />
             </div>
 
@@ -507,8 +692,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
             onAddText={handleAddText}
             onAddImage={() => imageInputRef.current?.click()}
             onBgImage={() => bgImageInputRef.current?.click()}
-            onAiGenerate={() => aiInputRef.current?.click()}
-            aiLoading={aiLoading}
+            onAddShape={handleAddShape}
           />
         </div>
       </div>
@@ -531,12 +715,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
           onClick={() => setActivePanel((p) => p === 'bg' ? null : 'bg')}
           active={activePanel === 'bg'}
         />
-        <ToolbarBtn
-          icon={aiLoading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          label="ИИ"
-          onClick={() => aiInputRef.current?.click()}
-          active={aiLoading}
-        />
+        <ToolbarBtn icon={<Box size={16} />} label="Фигура" onClick={handleAddShape} />
         {selectedEl?.type === 'text' && (
           <ToolbarBtn icon={<Bold size={16} />} label="Стиль" onClick={() => setActivePanel((p) => p === 'text' ? null : 'text')} active={activePanel === 'text'} />
         )}
@@ -569,8 +748,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
                 onAddText={handleAddText}
                 onAddImage={() => imageInputRef.current?.click()}
                 onBgImage={() => bgImageInputRef.current?.click()}
-                onAiGenerate={() => aiInputRef.current?.click()}
-                aiLoading={aiLoading}
+                onAddShape={handleAddShape}
                 mobilePanel={activePanel}
               />
             </div>
@@ -580,7 +758,7 @@ function FreeEditor({ onBack }: { onBack: () => void }) {
 
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
       <input ref={bgImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage} />
-      <input ref={aiInputRef} type="file" accept="image/*" className="hidden" onChange={handleAiGenerate} />
+      <input ref={replacePlaceholderInputRef} type="file" accept="image/*" className="hidden" onChange={handleReplacePlaceholderFile} />
     </div>
   );
 }
@@ -622,14 +800,13 @@ interface PropertiesPanelProps {
   onAddText: () => void;
   onAddImage: () => void;
   onBgImage: () => void;
-  onAiGenerate: () => void;
-  aiLoading?: boolean;
+  onAddShape: () => void;
   mobilePanel?: 'add' | 'bg' | 'text' | 'image' | null;
 }
 
 function PropertiesPanel({
   slide, selectedEl, onUpdateBackground, onUpdateElement,
-  onDeleteElement, onAddText, onAddImage, onBgImage, onAiGenerate, aiLoading, mobilePanel,
+  onDeleteElement, onAddText, onAddImage, onBgImage, onAddShape, mobilePanel,
 }: PropertiesPanelProps) {
 
   // On desktop: show everything relevant
@@ -664,13 +841,12 @@ function PropertiesPanel({
             </button>
           </div>
           <button
-            onClick={onAiGenerate}
-            disabled={aiLoading}
-            className="w-full flex items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[13px] font-medium transition-all touch-manipulation disabled:opacity-60"
-            style={{ background: 'linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%)', border: '1px solid rgba(99,102,241,0.2)', color: '#4f46e5' }}
+            onClick={onAddShape}
+            className="w-full flex items-center justify-center gap-1.5 rounded-2xl py-2.5 text-[13px] font-medium text-slate-700 transition-all touch-manipulation"
+            style={{ background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.07)' }}
           >
-            {aiLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {aiLoading ? 'Анализирую...' : 'ИИ из фото'}
+            <Box size={14} />
+            Фигура
           </button>
         </div>
       )}
@@ -763,10 +939,39 @@ function PropertiesPanel({
 
 const FONT_SIZES = [24, 36, 48, 64, 80];
 
+const FONT_FAMILIES = [
+  { label: 'Inter', value: 'Inter, sans-serif' },
+  { label: 'Montserrat', value: 'Montserrat, sans-serif' },
+  { label: 'Playfair', value: "'Playfair Display', serif" },
+  { label: 'Roboto', value: 'Roboto, sans-serif' },
+  { label: 'Bebas', value: "'Bebas Neue', cursive" },
+  { label: 'Raleway', value: 'Raleway, sans-serif' },
+];
+
 function TextPropsPanel({ el, onUpdate }: { el: TextElement; onUpdate: (u: Partial<TextElement>) => void }) {
   return (
     <div className="space-y-3">
       <p className="text-[11px] font-semibold text-[#1a1a18]/35 uppercase tracking-wider">Текст</p>
+
+      {/* Font family */}
+      <div className="space-y-1">
+        <p className="text-[11px] text-slate-400">Шрифт</p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {FONT_FAMILIES.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => onUpdate({ fontFamily: f.value })}
+              className={cn(
+                'flex-shrink-0 px-2.5 py-1.5 text-[12px] rounded-xl transition-all touch-manipulation',
+                (el.fontFamily ?? 'Inter, sans-serif') === f.value ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+              )}
+              style={{ fontFamily: f.value }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Font size */}
       <div className="space-y-1">
@@ -1190,6 +1395,12 @@ function TemplateEditor({ onBack }: { onBack: () => void }) {
 
 export function CarouselEditor() {
   const [mode, setMode] = useState<EditorMode>('home');
+  const [aiGeneratedSlides, setAiGeneratedSlides] = useState<Slide[] | null>(null);
+
+  const handleAiDone = useCallback((slides: Slide[]) => {
+    setAiGeneratedSlides(slides);
+    setMode('create');
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-base relative">
@@ -1220,8 +1431,19 @@ export function CarouselEditor() {
           className="flex-1 flex flex-col overflow-hidden"
         >
           {mode === 'home' && <HomeScreen onMode={setMode} />}
-          {mode === 'create' && <FreeEditor onBack={() => setMode('home')} />}
+          {mode === 'create' && (
+            <FreeEditor
+              onBack={() => { setAiGeneratedSlides(null); setMode('home'); }}
+              initialSlides={aiGeneratedSlides ?? undefined}
+            />
+          )}
           {mode === 'template' && <TemplateEditor onBack={() => setMode('home')} />}
+          {mode === 'ai-photo' && (
+            <AiPhotoScreen
+              onBack={() => setMode('home')}
+              onDone={handleAiDone}
+            />
+          )}
         </motion.div>
       </AnimatePresence>
     </div>

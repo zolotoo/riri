@@ -940,7 +940,7 @@ async function handleAnalyzeCarousel(req, res) {
 
   const prompt = `Ты дизайн-аналитик. Проанализируй слайд карусели Instagram и верни ТОЛЬКО валидный JSON без markdown.
 
-Формат:
+Формат ответа:
 {
   "background": {
     "type": "solid",
@@ -950,25 +950,30 @@ async function handleAnalyzeCarousel(req, res) {
     {
       "type": "text",
       "text": "текст блока",
-      "x": 8,
-      "y": 8,
+      "x": 8, "y": 8,
       "fontSize": 48,
       "fontWeight": 700,
       "color": "#hex",
       "textAlign": "left",
       "width": 80
+    },
+    {
+      "type": "placeholder",
+      "x": 10, "y": 40,
+      "width": 80, "height": 35,
+      "label": "Фото",
+      "borderRadius": 16
     }
   ]
 }
 
 Правила:
-- background.type = "solid" если однородный/почти однородный фон, "gradient" если заметный переход (добавь from, to, direction).
-- Все координаты x, y — в % от ширины/высоты (0–90).
-- fontSize — как если бы слайд был 1080px шириной (диапазон 24–120).
-- fontWeight: 400 (обычный) или 700 (жирный).
-- Верни максимум 5 текстовых элементов, только самые важные.
-- НЕ включай фото/иконки/линии — только текст.
-- Верни ТОЛЬКО JSON, без пояснений.`;
+- background: "solid" если однородный фон (укажи точный hex-цвет), "gradient" если переход (добавь from, to, direction="to bottom right").
+- Текстовые элементы (type="text"): максимум 6 шт. Точно скопируй текст. Координаты x, y в % (0-90). fontSize как если бы слайд 1080px шириной (24-120). fontWeight 400 или 700.
+- Для каждой фотографии/изображения на слайде: добавь элемент type="placeholder" с координатами и размерами в % (0-90). Это будет серый блок-заглушка. width и height тоже в %.
+- Если нет фото на слайде — не добавляй placeholder.
+- ВАЖНО: верни все заметные мелкие детали — разделительные линии (placeholder с height: 1-2%), иконки (placeholder маленький size).
+- Верни ТОЛЬКО JSON, без пояснений, без markdown.`;
 
   try {
     const { text } = await callOpenRouter({

@@ -21,6 +21,7 @@ export interface TextElement {
   fontStyle: 'normal' | 'italic';
   textAlign: 'left' | 'center' | 'right';
   width: number; // percentage 0-100
+  fontFamily: string;
 }
 
 export interface ImageElement {
@@ -34,7 +35,29 @@ export interface ImageElement {
   objectFit: 'cover' | 'contain';
 }
 
-export type SlideElement = TextElement | ImageElement;
+export interface ShapeElement {
+  id: string;
+  type: 'shape';
+  position: Position;
+  size: Size;
+  shapeType: 'rect' | 'circle' | 'line';
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  borderRadius: number;
+  opacity: number;
+}
+
+export interface PlaceholderElement {
+  id: string;
+  type: 'placeholder';
+  position: Position;
+  size: Size;
+  label: string;
+  borderRadius: number;
+}
+
+export type SlideElement = TextElement | ImageElement | ShapeElement | PlaceholderElement;
 
 // ─── Background ─────────────────────────────────────────────
 
@@ -100,6 +123,7 @@ export function createDefaultTextElement(overrides?: Partial<TextElement>): Text
     fontStyle: 'normal',
     textAlign: 'left',
     width: 80,
+    fontFamily: 'Inter, sans-serif',
     ...overrides,
   };
 }
@@ -114,6 +138,34 @@ export function createDefaultImageElement(src: string, overrides?: Partial<Image
     borderRadius: 16,
     shadow: 'lg',
     objectFit: 'cover',
+    ...overrides,
+  };
+}
+
+export function createDefaultShapeElement(overrides?: Partial<ShapeElement>): ShapeElement {
+  return {
+    id: uid(),
+    type: 'shape',
+    position: { x: 20, y: 20 },
+    size: { width: 60, height: 30 },
+    shapeType: 'rect',
+    fill: 'rgba(255,255,255,0.2)',
+    stroke: 'rgba(255,255,255,0.6)',
+    strokeWidth: 2,
+    borderRadius: 0,
+    opacity: 1,
+    ...overrides,
+  };
+}
+
+export function createDefaultPlaceholderElement(overrides?: Partial<PlaceholderElement>): PlaceholderElement {
+  return {
+    id: uid(),
+    type: 'placeholder',
+    position: { x: 10, y: 30 },
+    size: { width: 80, height: 45 },
+    label: 'Фото',
+    borderRadius: 16,
     ...overrides,
   };
 }
