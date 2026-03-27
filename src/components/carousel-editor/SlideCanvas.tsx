@@ -61,15 +61,38 @@ interface TextElementProps {
   onStopEdit: () => void;
   onTextChange: (text: string) => void;
   onMove: (x: number, y: number) => void;
+  onWidthChange: (w: number) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 function TextElementView({
   el, selected, editing, scale,
-  onSelect, onStartEdit, onStopEdit, onTextChange, onMove, containerRef,
+  onSelect, onStartEdit, onStopEdit, onTextChange, onMove, onWidthChange, containerRef,
 }: TextElementProps) {
   const textRef = useRef<HTMLDivElement>(null);
   const drag = useDrag(() => el.position, onMove, containerRef);
+
+  // Width resize via bottom-right handle
+  const resizing = useRef(false);
+  const resizeStart = useRef({ x: 0, w: 0 });
+
+  const onResizeDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizing.current = true;
+    resizeStart.current = { x: e.clientX, w: el.width };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [el.width]);
+
+  const onResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!resizing.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - resizeStart.current.x) / rect.width) * 100;
+    onWidthChange(Math.max(10, Math.min(98, resizeStart.current.w + dx)));
+  }, [onWidthChange, containerRef]);
+
+  const onResizeUp = useCallback(() => { resizing.current = false; }, []);
 
   // Focus + cursor at end when editing starts
   useEffect(() => {
@@ -92,6 +115,8 @@ function TextElementView({
     }
   }, [onSelect, onStartEdit, drag.hasMoved]);
 
+  const HANDLE = 14; // handle size px
+
   return (
     <div
       className="absolute touch-none"
@@ -99,36 +124,12 @@ function TextElementView({
         left: `${el.position.x}%`,
         top: `${el.position.y}%`,
         width: `${el.width}%`,
-        cursor: editing ? 'text' : 'text',
         transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
         transformOrigin: 'top left',
         zIndex: el.zIndex ?? 1,
       }}
     >
-      {/* Drag handle — only when selected and not editing */}
-      {selected && !editing && (
-        <div
-          className="absolute -top-5 left-0 flex items-center gap-1 touch-none z-20 select-none"
-          style={{ cursor: 'grab' }}
-          onPointerDown={drag.onPointerDown}
-          onPointerMove={drag.onPointerMove}
-          onPointerUp={drag.onPointerUp}
-        >
-          <div
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] text-white font-medium"
-            style={{ background: 'rgba(99,102,241,0.85)', backdropFilter: 'blur(4px)' }}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-              <circle cx="2" cy="2" r="1"/><circle cx="5" cy="2" r="1"/><circle cx="8" cy="2" r="1"/>
-              <circle cx="2" cy="5" r="1"/><circle cx="5" cy="5" r="1"/><circle cx="8" cy="5" r="1"/>
-              <circle cx="2" cy="8" r="1"/><circle cx="5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/>
-            </svg>
-            Двигай
-          </div>
-        </div>
-      )}
-
-      {/* Selection ring */}
+      {/* Selection outline */}
       {selected && (
         <div
           className="absolute inset-0 pointer-events-none rounded-sm"
@@ -136,14 +137,35 @@ function TextElementView({
         />
       )}
 
+      {/* Inline format toolbar — shown when editing */}
+      {editing && (
+        <div
+          className="absolute -top-9 left-0 flex items-center gap-0.5 px-1.5 py-1 rounded-xl z-40 select-none touch-none"
+          style={{ background: 'rgba(30,30,35,0.92)', backdropFilter: 'blur(8px)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            className="px-2 py-0.5 text-white rounded-lg text-[12px] font-bold hover:bg-white/20 transition-colors"
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }}
+          >B</button>
+          <button
+            className="px-2 py-0.5 text-white rounded-lg text-[12px] italic hover:bg-white/20 transition-colors"
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic'); }}
+          >I</button>
+          <div className="w-px h-3 bg-white/20 mx-0.5" />
+          <button
+            className="px-1.5 py-0.5 text-white rounded-lg text-[10px] hover:bg-white/20 transition-colors"
+            onMouseDown={(e) => { e.preventDefault(); document.execCommand('removeFormat'); }}
+          >✕</button>
+        </div>
+      )}
+
       {/* Text content */}
       <div
         ref={textRef}
         contentEditable={editing}
         suppressContentEditableWarning
-        className={cn(
-          'outline-none whitespace-pre-wrap break-words',
-        )}
+        className="outline-none whitespace-pre-wrap break-words"
         style={{
           fontSize: el.fontSize * scale,
           fontWeight: el.fontWeight,
@@ -155,20 +177,59 @@ function TextElementView({
           letterSpacing: el.letterSpacing ? `${el.letterSpacing}em` : undefined,
           minHeight: el.fontSize * scale,
           userSelect: editing ? 'text' : 'none',
-          cursor: editing ? 'text' : 'text',
+          cursor: editing ? 'text' : 'default',
         }}
+        dangerouslySetInnerHTML={editing ? undefined : { __html: el.text }}
         onClick={handleClick}
         onBlur={() => {
-          if (textRef.current) onTextChange(textRef.current.innerText);
+          if (textRef.current) onTextChange(textRef.current.innerHTML);
           onStopEdit();
         }}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Escape') (e.target as HTMLElement).blur();
         }}
-      >
-        {el.text}
-      </div>
+      />
+
+      {/* Corner handles — visible when selected and not editing */}
+      {selected && !editing && (
+        <>
+          {/* Top-left — move handle */}
+          <div
+            className="absolute touch-none"
+            style={{
+              top: -HANDLE / 2, left: -HANDLE / 2,
+              width: HANDLE, height: HANDLE,
+              borderRadius: '50%',
+              background: 'rgba(99,102,241,1)',
+              border: '2px solid white',
+              cursor: 'grab',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+              zIndex: 30,
+            }}
+            onPointerDown={drag.onPointerDown}
+            onPointerMove={drag.onPointerMove}
+            onPointerUp={drag.onPointerUp}
+          />
+          {/* Bottom-right — width resize handle */}
+          <div
+            className="absolute touch-none"
+            style={{
+              bottom: -HANDLE / 2, right: -HANDLE / 2,
+              width: HANDLE, height: HANDLE,
+              borderRadius: '50%',
+              background: 'rgba(99,102,241,1)',
+              border: '2px solid white',
+              cursor: 'ew-resize',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+              zIndex: 30,
+            }}
+            onPointerDown={onResizeDown}
+            onPointerMove={onResizeMove}
+            onPointerUp={onResizeUp}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -650,8 +711,9 @@ export const SlideCanvas = forwardRef<HTMLDivElement, SlideCanvasProps>(
                 onSelect={() => onSelectElement(el.id)}
                 onStartEdit={() => onStartEditText(el.id)}
                 onStopEdit={onStopEditText}
-                onTextChange={(text) => onUpdateTextContent(el.id, text)}
+                onTextChange={(html) => onUpdateTextContent(el.id, html)}
                 onMove={(x, y) => onUpdateElement(el.id, { position: { x, y } })}
+                onWidthChange={(w) => onUpdateElement(el.id, { width: w } as Partial<TextElement>)}
                 containerRef={containerRef}
               />
             );
