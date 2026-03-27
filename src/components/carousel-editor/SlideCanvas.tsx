@@ -188,7 +188,7 @@ function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, con
   const drag = useDrag(() => el.position, onMove, containerRef);
   const [activeDrag, setActiveDrag] = useState(false);
 
-  // Resize
+  // Corner resize (both dimensions)
   const resizeDragging = useRef(false);
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
@@ -213,6 +213,48 @@ function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, con
   }, [onResize, containerRef]);
 
   const handleResizeUp = useCallback(() => { resizeDragging.current = false; }, []);
+
+  // Right-edge resize (width only)
+  const resizeWDragging = useRef(false);
+  const resizeWStart = useRef({ x: 0, w: 0 });
+
+  const handleResizeWDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    resizeWDragging.current = true;
+    resizeWStart.current = { x: e.clientX, w: el.size.width };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [el.size.width]);
+
+  const handleResizeWMove = useCallback((e: React.PointerEvent) => {
+    if (!resizeWDragging.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dx = ((e.clientX - resizeWStart.current.x) / rect.width) * 100;
+    onResize(Math.max(8, Math.min(90, resizeWStart.current.w + dx)), el.size.height);
+  }, [onResize, containerRef, el.size.height]);
+
+  const handleResizeWUp = useCallback(() => { resizeWDragging.current = false; }, []);
+
+  // Bottom-edge resize (height only)
+  const resizeHDragging = useRef(false);
+  const resizeHStart = useRef({ y: 0, h: 0 });
+
+  const handleResizeHDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    resizeHDragging.current = true;
+    resizeHStart.current = { y: e.clientY, h: el.size.height };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [el.size.height]);
+
+  const handleResizeHMove = useCallback((e: React.PointerEvent) => {
+    if (!resizeHDragging.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dy = ((e.clientY - resizeHStart.current.y) / rect.height) * 100;
+    onResize(el.size.width, Math.max(8, Math.min(90, resizeHStart.current.h + dy)));
+  }, [onResize, containerRef, el.size.width]);
+
+  const handleResizeHUp = useCallback(() => { resizeHDragging.current = false; }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -260,7 +302,29 @@ function ImageElementView({ el, selected, scale, onSelect, onMove, onResize, con
         />
       )}
 
-      {/* Resize handle */}
+      {/* Right-edge handle (width) */}
+      {selected && (
+        <div
+          className="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-7 rounded-full bg-indigo-400 touch-none z-10 border-2 border-white"
+          style={{ cursor: 'e-resize' }}
+          onPointerDown={handleResizeWDown}
+          onPointerMove={handleResizeWMove}
+          onPointerUp={handleResizeWUp}
+        />
+      )}
+
+      {/* Bottom-edge handle (height) */}
+      {selected && (
+        <div
+          className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-7 h-3 rounded-full bg-indigo-400 touch-none z-10 border-2 border-white"
+          style={{ cursor: 's-resize' }}
+          onPointerDown={handleResizeHDown}
+          onPointerMove={handleResizeHMove}
+          onPointerUp={handleResizeHUp}
+        />
+      )}
+
+      {/* Corner handle (both) */}
       {selected && (
         <div
           className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 touch-none z-10 border-2 border-white"

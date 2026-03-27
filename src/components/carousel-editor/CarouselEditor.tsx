@@ -6,8 +6,9 @@ import {
   ArrowLeft, PenLine, LayoutTemplate, Type, Image as ImageIcon,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
   Loader2, Camera, Sparkles, Box, Copy, Minus, Circle as CircleIcon,
-  Square, RefreshCw,
+  Square, RefreshCw, BookmarkPlus, FolderOpen,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../../utils/cn';
 import { SlideCanvas } from './SlideCanvas';
 import { SlidePreview } from './SlidePreview';
@@ -20,6 +21,36 @@ import {
   CAROUSEL_TEMPLATES, createEmptySlidesData, createEmptySlideData,
   type CarouselTemplate, type SlideData,
 } from './templates';
+
+// ─── Draft system ─────────────────────────────────────────────
+
+interface CarouselDraft {
+  id: string;
+  name: string;
+  slides: Slide[];
+  updatedAt: number;
+}
+
+function uid2(): string {
+  return `draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getDrafts(): CarouselDraft[] {
+  try { return JSON.parse(localStorage.getItem('carousel_drafts') || '[]'); } catch { return []; }
+}
+
+function saveDraftToStorage(draft: CarouselDraft): void {
+  const all = getDrafts().filter((d) => d.id !== draft.id);
+  localStorage.setItem('carousel_drafts', JSON.stringify([draft, ...all].slice(0, 20)));
+}
+
+function deleteDraftFromStorage(id: string): void {
+  localStorage.setItem('carousel_drafts', JSON.stringify(getDrafts().filter((d) => d.id !== id)));
+}
+
+function formatDraftDate(ts: number): string {
+  return new Date(ts).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 
 // ─── Shared design tokens (matching AIScriptwriter) ───────────
 
@@ -40,7 +71,19 @@ type EditorMode = 'home' | 'create' | 'template' | 'ai-photo';
 
 // ─── Home screen ─────────────────────────────────────────────
 
-function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
+function HomeScreen({ onMode, onLoadDraft }: { onMode: (m: EditorMode) => void; onLoadDraft: (draft: CarouselDraft) => void }) {
+  const [drafts, setDrafts] = useState<CarouselDraft[]>([]);
+
+  useState(() => {
+    setDrafts(getDrafts().slice(0, 5));
+  });
+
+  const handleDeleteDraft = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteDraftFromStorage(id);
+    setDrafts((prev) => prev.filter((d) => d.id !== id));
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-y-auto px-4 custom-scrollbar-light">
       <div className="max-w-2xl mx-auto w-full py-8 space-y-6">
@@ -154,6 +197,50 @@ function HomeScreen({ onMode }: { onMode: (m: EditorMode) => void }) {
             </div>
           </GlassCard>
         </motion.div>
+
+        {/* Drafts */}
+        {drafts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.25 }}
+          >
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-[#1a1a18]/35 uppercase tracking-wider flex items-center gap-1.5">
+                <FolderOpen size={12} />
+                Черновики
+              </p>
+              {drafts.map((draft) => (
+                <button
+                  key={draft.id}
+                  onClick={() => onLoadDraft(draft)}
+                  className="w-full text-left active:scale-[0.98] touch-manipulation transition-transform"
+                >
+                  <GlassCard className="px-4 py-3 flex items-center gap-3 hover:shadow-md transition-shadow">
+                    <div
+                      className="w-8 h-8 rounded-[12px] flex items-center justify-center flex-shrink-0"
+                      style={{ background: '#f4f4f2' }}
+                    >
+                      <PenLine size={15} className="text-[#1a1a18]/50" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-medium text-[#1a1a18] leading-tight truncate">{draft.name}</p>
+                      <p className="text-[11px] text-[#1a1a18]/35 leading-snug mt-0.5">
+                        {draft.slides.length} сл. · {formatDraftDate(draft.updatedAt)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={(e) => handleDeleteDraft(draft.id, e)}
+                      className="w-6 h-6 flex items-center justify-center text-[#1a1a18]/20 hover:text-red-400 transition-colors flex-shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </GlassCard>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
@@ -377,6 +464,35 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
   );
 }
 
+// ─── Floating toolbar button ─────────────────────────────────
+
+function FloatBtn({
+  icon, label, active, onClick, danger,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      whileTap={{ scale: 0.88 }}
+      title={label}
+      className="w-11 h-11 rounded-2xl flex items-center justify-center touch-manipulation flex-shrink-0 transition-colors"
+      style={{
+        background: active ? '#1a1a18' : danger ? 'rgba(239,68,68,0.08)' : '#ffffff',
+        border: '1px solid rgba(0,0,0,0.07)',
+        boxShadow: '0 2px 14px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.06)',
+        color: active ? '#ffffff' : danger ? '#ef4444' : '#1a1a18',
+      }}
+    >
+      {icon}
+    </motion.button>
+  );
+}
+
 // ─── Background preset picker ────────────────────────────────
 
 const PRESET_COLORS = [
@@ -394,14 +510,20 @@ const PRESET_GRADIENTS = [
 
 // ─── Free editor ──────────────────────────────────────────────
 
-function FreeEditor({ onBack, initialSlides, aiOriginalImage }: { onBack: () => void; initialSlides?: Slide[]; aiOriginalImage?: { base64: string; mimeType: string } }) {
+function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: {
+  onBack: () => void;
+  initialSlides?: Slide[];
+  initialDraftId?: string;
+  aiOriginalImage?: { base64: string; mimeType: string };
+}) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides ?? [createDefaultSlide()]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [activePanel, setActivePanel] = useState<'add' | 'bg' | 'text' | 'image' | null>(null);
+  const [activePanel, setActivePanel] = useState<'add' | 'bg' | 'text' | 'image' | 'shape' | null>(null);
   const [regenBgLoading, setRegenBgLoading] = useState(false);
+  const [draftId] = useState<string>(initialDraftId ?? uid2());
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -493,7 +615,20 @@ function FreeEditor({ onBack, initialSlides, aiOriginalImage }: { onBack: () => 
     const el = slide.elements.find((e) => e.id === id);
     if (el?.type === 'text') setActivePanel('text');
     else if (el?.type === 'image') setActivePanel('image');
+    else if (el?.type === 'shape') setActivePanel('shape');
+    else setActivePanel(null);
   }, [slide.elements]);
+
+  const handleSaveDraft = useCallback(() => {
+    const draft: CarouselDraft = {
+      id: draftId,
+      name: `Черновик ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`,
+      slides,
+      updatedAt: Date.now(),
+    };
+    saveDraftToStorage(draft);
+    toast.success('Черновик сохранён');
+  }, [draftId, slides]);
 
   const handleAddText = useCallback(() => {
     const el = createDefaultTextElement({ text: 'Твой текст' });
@@ -633,6 +768,14 @@ function FreeEditor({ onBack, initialSlides, aiOriginalImage }: { onBack: () => 
             {currentIdx + 1} / {slides.length}
           </span>
           <button
+            onClick={handleSaveDraft}
+            className="flex items-center gap-1.5 rounded-2xl px-3 py-2 text-[13px] font-medium transition-all active:scale-95 touch-manipulation"
+            style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid rgba(0,0,0,0.07)' }}
+          >
+            <BookmarkPlus size={13} />
+            Черновик
+          </button>
+          <button
             onClick={exportSlides}
             disabled={exporting}
             className={cn(
@@ -642,7 +785,7 @@ function FreeEditor({ onBack, initialSlides, aiOriginalImage }: { onBack: () => 
             style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.15)' }}
           >
             <Download size={14} />
-            {exporting ? 'Экспорт...' : 'Скачать PNG'}
+            {exporting ? '...' : 'PNG'}
           </button>
         </div>
       </div>
@@ -700,187 +843,197 @@ function FreeEditor({ onBack, initialSlides, aiOriginalImage }: { onBack: () => 
           )}
         </div>
 
-        {/* Canvas area */}
-        <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto py-4 px-4 gap-4">
+        {/* Canvas + floating UI wrapper */}
+        <div className="flex-1 relative overflow-hidden">
 
-          {/* Mobile slide strip */}
-          <div className="flex lg:hidden gap-2 overflow-x-auto pb-1 w-full max-w-sm">
-            {slides.map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => { setCurrentIdx(i); setSelectedId(null); }}
-                className={cn(
-                  'flex-shrink-0 w-9 h-12 rounded-xl overflow-hidden border-2 transition-all',
-                  i === currentIdx ? 'border-slate-500' : 'border-transparent',
-                )}
-                style={s.background.type === 'solid' ? { backgroundColor: s.background.color } :
-                  s.background.type === 'gradient' ? { background: `linear-gradient(${s.background.direction}, ${s.background.from}, ${s.background.to})` } :
-                  { backgroundImage: `url(${s.background.src})`, backgroundSize: 'cover' }
-                }
-              />
-            ))}
-            {slides.length < 10 && (
-              <button
-                onClick={addSlide}
-                className="flex-shrink-0 w-9 h-12 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center"
-              >
-                <Plus size={14} className="text-slate-400" />
-              </button>
-            )}
-          </div>
+          {/* Scrollable canvas area */}
+          <div className="absolute inset-0 overflow-y-auto flex flex-col items-center justify-start py-4 px-4 gap-4 custom-scrollbar-light">
 
-          {/* Canvas */}
-          <div className="w-full max-w-sm relative">
-            <div
-              className="w-full overflow-hidden"
-              style={{ borderRadius: 20, boxShadow: '0 4px 32px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)' }}
-            >
-              <SlideCanvas
-                ref={canvasRef}
-                slide={slide}
-                selectedId={selectedId}
-                editingTextId={editingTextId}
-                onSelectElement={handleSelectElement}
-                onStartEditText={setEditingTextId}
-                onStopEditText={() => setEditingTextId(null)}
-                onUpdateElement={onUpdateElement}
-                onUpdateTextContent={onUpdateTextContent}
-                onReplacePlaceholder={handleReplacePlaceholder}
-              />
-            </div>
-
-            {/* Empty state hint */}
-            {!hasElements && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div
-                  className="px-4 py-2.5 rounded-2xl text-center"
-                  style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
+            {/* Mobile slide strip */}
+            <div className="flex lg:hidden gap-2 overflow-x-auto pb-1 w-full max-w-sm">
+              {slides.map((s, i) => (
+                <button
+                  key={s.id}
+                  onClick={() => { setCurrentIdx(i); setSelectedId(null); }}
+                  className={cn(
+                    'flex-shrink-0 w-9 h-12 rounded-xl overflow-hidden border-2 transition-all',
+                    i === currentIdx ? 'border-slate-500' : 'border-transparent',
+                  )}
+                  style={s.background.type === 'solid' ? { backgroundColor: s.background.color } :
+                    s.background.type === 'gradient' ? { background: `linear-gradient(${s.background.direction}, ${s.background.from}, ${s.background.to})` } :
+                    { backgroundImage: `url(${s.background.src})`, backgroundSize: 'cover' }
+                  }
+                />
+              ))}
+              {slides.length < 10 && (
+                <button
+                  onClick={addSlide}
+                  className="flex-shrink-0 w-9 h-12 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center"
                 >
-                  <p className="text-[13px] text-white/80 hidden lg:block">Нажми кнопки справа</p>
-                  <p className="text-[13px] text-white/80 lg:hidden">Нажми кнопки ниже</p>
-                  <p className="text-[11px] text-white/50">чтобы добавить текст, фото или фигуру</p>
-                </div>
+                  <Plus size={14} className="text-slate-400" />
+                </button>
+              )}
+            </div>
+
+            {/* Canvas */}
+            <div className="w-full max-w-sm relative">
+              <div
+                className="w-full overflow-hidden"
+                style={{ borderRadius: 20, boxShadow: '0 4px 32px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)' }}
+              >
+                <SlideCanvas
+                  ref={canvasRef}
+                  slide={slide}
+                  selectedId={selectedId}
+                  editingTextId={editingTextId}
+                  onSelectElement={handleSelectElement}
+                  onStartEditText={setEditingTextId}
+                  onStopEditText={() => setEditingTextId(null)}
+                  onUpdateElement={onUpdateElement}
+                  onUpdateTextContent={onUpdateTextContent}
+                  onReplacePlaceholder={handleReplacePlaceholder}
+                />
               </div>
+
+              {/* Empty state hint */}
+              {!hasElements && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div
+                    className="px-4 py-2.5 rounded-2xl text-center"
+                    style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
+                  >
+                    <p className="text-[13px] text-white/80">Нажми + справа</p>
+                    <p className="text-[11px] text-white/50">чтобы добавить текст или фото</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Hint */}
+            {selectedEl?.type === 'text' && editingTextId !== selectedId && (
+              <p className="text-[12px] text-[#1a1a18]/40 text-center">
+                Нажми «Двигай» чтобы переместить
+              </p>
             )}
           </div>
 
-          {/* Hint: drag handle */}
-          {selectedEl?.type === 'text' && editingTextId !== selectedId && (
-            <p className="text-[12px] text-[#1a1a18]/40 text-center">
-              Нажми «Двигай» чтобы переместить
-            </p>
-          )}
-        </div>
+          {/* ── Floating toolbar buttons (right side) ── */}
+          <div className="absolute right-3 top-4 flex flex-col gap-2 z-30">
 
-        {/* Properties panel (right, desktop) */}
-        <div className="hidden lg:flex w-[260px] flex-col border-l border-black/[0.06] overflow-y-auto">
-          <PropertiesPanel
-            slide={slide}
-            selectedEl={selectedEl}
-            onUpdateBackground={onUpdateBackground}
-            onUpdateElement={onUpdateElement}
-            onDeleteElement={onDeleteElement}
-            onAddText={handleAddText}
-            onAddImage={() => imageInputRef.current?.click()}
-            onBgImage={() => bgImageInputRef.current?.click()}
-            onRegenBg={aiOriginalImage ? handleRegenBg : undefined}
-            regenBgLoading={regenBgLoading}
-            onAddShape={handleAddShape}
-          />
-        </div>
-      </div>
+            {/* Add */}
+            <FloatBtn
+              icon={<Plus size={18} />}
+              label="Добавить"
+              active={activePanel === 'add'}
+              onClick={() => setActivePanel((p) => p === 'add' ? null : 'add')}
+            />
 
-      {/* Mobile bottom toolbar */}
-      <div
-        className="lg:hidden px-4 py-3 flex items-center gap-2 overflow-x-auto"
-        style={{ borderTop: '1px solid rgba(0,0,0,0.06)', background: '#fafafa' }}
-      >
-        <ToolbarBtn icon={<Type size={16} />} label="Текст" onClick={handleAddText} />
-        <ToolbarBtn icon={<ImageIcon size={16} />} label="Фото" onClick={() => imageInputRef.current?.click()} />
-        <ToolbarBtn
-          icon={<div className="w-4 h-4 rounded-full border border-slate-300"
-            style={slide.background.type === 'solid' ? { backgroundColor: slide.background.color } :
-              slide.background.type === 'gradient' ? { background: `linear-gradient(${slide.background.direction}, ${slide.background.from}, ${slide.background.to})` } :
-              { background: '#888' }
-            }
-          />}
-          label="Фон"
-          onClick={() => setActivePanel((p) => p === 'bg' ? null : 'bg')}
-          active={activePanel === 'bg'}
-        />
-        <ToolbarBtn icon={<Box size={16} />} label="Фигура" onClick={handleAddShape} />
-        {selectedEl?.type === 'text' && (
-          <ToolbarBtn icon={<Bold size={16} />} label="Стиль" onClick={() => setActivePanel((p) => p === 'text' ? null : 'text')} active={activePanel === 'text'} />
-        )}
-        {selectedEl?.type === 'image' && (
-          <ToolbarBtn icon={<ImageIcon size={16} />} label="Фото" onClick={() => setActivePanel((p) => p === 'image' ? null : 'image')} active={activePanel === 'image'} />
-        )}
-        {selectedEl && (
-          <ToolbarBtn icon={<Trash2 size={16} />} label="Удалить" onClick={() => onDeleteElement(selectedEl.id)} danger />
-        )}
-      </div>
+            {/* Background */}
+            <FloatBtn
+              icon={
+                <div
+                  className="w-[18px] h-[18px] rounded-full border border-black/10 flex-shrink-0"
+                  style={
+                    slide.background.type === 'solid' ? { backgroundColor: slide.background.color }
+                    : slide.background.type === 'gradient' ? { background: `linear-gradient(${slide.background.direction}, ${slide.background.from}, ${slide.background.to})` }
+                    : { background: 'linear-gradient(135deg, #e2e8f0, #94a3b8)' }
+                  }
+                />
+              }
+              label="Фон"
+              active={activePanel === 'bg'}
+              onClick={() => setActivePanel((p) => p === 'bg' ? null : 'bg')}
+            />
 
-      {/* Mobile bottom sheet for bg/text/image */}
-      <AnimatePresence>
-        {activePanel && (
-          <motion.div
-            initial={{ y: '100%', opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="lg:hidden absolute bottom-0 left-0 right-0 z-30 rounded-t-[24px] overflow-hidden"
-            style={{ background: '#fff', boxShadow: '0 -8px 32px rgba(0,0,0,0.12)', maxHeight: '50vh', overflowY: 'auto' }}
-          >
-            <div className="px-4 py-4">
-              <PropertiesPanel
-                slide={slide}
-                selectedEl={selectedEl}
-                onUpdateBackground={onUpdateBackground}
-                onUpdateElement={onUpdateElement}
-                onDeleteElement={onDeleteElement}
-                onAddText={handleAddText}
-                onAddImage={() => imageInputRef.current?.click()}
-                onBgImage={() => bgImageInputRef.current?.click()}
-                onRegenBg={aiOriginalImage ? handleRegenBg : undefined}
-                regenBgLoading={regenBgLoading}
-                onAddShape={handleAddShape}
-                mobilePanel={activePanel}
+            {/* Shape (always visible) */}
+            <FloatBtn
+              icon={<Box size={18} />}
+              label="Фигура"
+              onClick={handleAddShape}
+            />
+
+            {/* Text props */}
+            {selectedEl?.type === 'text' && (
+              <FloatBtn
+                icon={<Type size={18} />}
+                label="Текст"
+                active={activePanel === 'text'}
+                onClick={() => setActivePanel((p) => p === 'text' ? null : 'text')}
               />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            )}
+
+            {/* Image props */}
+            {selectedEl?.type === 'image' && (
+              <FloatBtn
+                icon={<ImageIcon size={18} />}
+                label="Фото"
+                active={activePanel === 'image'}
+                onClick={() => setActivePanel((p) => p === 'image' ? null : 'image')}
+              />
+            )}
+
+            {/* Shape props */}
+            {selectedEl?.type === 'shape' && (
+              <FloatBtn
+                icon={<Box size={18} />}
+                label="Стиль"
+                active={activePanel === 'shape'}
+                onClick={() => setActivePanel((p) => p === 'shape' ? null : 'shape')}
+              />
+            )}
+
+            {/* Delete */}
+            {selectedEl && (
+              <FloatBtn
+                icon={<Trash2 size={16} />}
+                label="Удалить"
+                onClick={() => { onDeleteElement(selectedEl.id); }}
+                danger
+              />
+            )}
+          </div>
+
+          {/* ── Floating properties panel ── */}
+          <AnimatePresence>
+            {activePanel && (
+              <motion.div
+                key={activePanel}
+                initial={{ opacity: 0, x: 10, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 10, scale: 0.96 }}
+                transition={{ duration: 0.16, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="absolute right-[58px] top-4 z-20 w-52 max-h-[calc(100%-32px)] overflow-y-auto rounded-[20px] custom-scrollbar-light"
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid rgba(0,0,0,0.07)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06)',
+                }}
+              >
+                <div className="p-3.5">
+                  <PropertiesPanel
+                    slide={slide}
+                    selectedEl={selectedEl}
+                    onUpdateBackground={onUpdateBackground}
+                    onUpdateElement={onUpdateElement}
+                    onAddText={handleAddText}
+                    onAddImage={() => imageInputRef.current?.click()}
+                    onBgImage={() => bgImageInputRef.current?.click()}
+                    onRegenBg={aiOriginalImage ? handleRegenBg : undefined}
+                    regenBgLoading={regenBgLoading}
+                    onAddShape={handleAddShape}
+                    mobilePanel={activePanel}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
       <input ref={bgImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage} />
       <input ref={replacePlaceholderInputRef} type="file" accept="image/*" className="hidden" onChange={handleReplacePlaceholderFile} />
     </div>
-  );
-}
-
-// ─── Toolbar button ──────────────────────────────────────────
-
-function ToolbarBtn({
-  icon, label, onClick, active, danger,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  active?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'flex flex-col items-center gap-1 flex-shrink-0 px-3 py-2 rounded-2xl transition-all touch-manipulation min-w-[56px]',
-        active ? 'bg-slate-100' : 'hover:bg-slate-50',
-        danger && 'text-red-500',
-      )}
-    >
-      <span className={cn(danger ? 'text-red-500' : 'text-slate-600')}>{icon}</span>
-      <span className={cn('text-[10px] font-medium', danger ? 'text-red-400' : 'text-slate-500')}>{label}</span>
-    </button>
   );
 }
 
@@ -891,32 +1044,30 @@ interface PropertiesPanelProps {
   selectedEl: SlideElement | null;
   onUpdateBackground: (bg: SlideBackground) => void;
   onUpdateElement: (id: string, updates: Partial<SlideElement>) => void;
-  onDeleteElement: (id: string) => void;
   onAddText: () => void;
   onAddImage: () => void;
   onBgImage: () => void;
   onRegenBg?: () => void;
   regenBgLoading?: boolean;
   onAddShape: () => void;
-  mobilePanel?: 'add' | 'bg' | 'text' | 'image' | null;
+  mobilePanel: 'add' | 'bg' | 'text' | 'image' | 'shape';
 }
 
 function PropertiesPanel({
   slide, selectedEl, onUpdateBackground, onUpdateElement,
-  onDeleteElement, onAddText, onAddImage, onBgImage, onRegenBg, regenBgLoading, onAddShape, mobilePanel,
+  onAddText, onAddImage, onBgImage, onRegenBg, regenBgLoading, onAddShape, mobilePanel,
 }: PropertiesPanelProps) {
 
-  // On desktop: show everything relevant
-  // On mobile: show only the active panel
-  const showAdd = !mobilePanel || mobilePanel === 'add';
-  const showBg = !mobilePanel || mobilePanel === 'bg';
-  const showText = !mobilePanel || mobilePanel === 'text';
-  const showImage = !mobilePanel || mobilePanel === 'image';
+  const showAdd = mobilePanel === 'add';
+  const showBg = mobilePanel === 'bg';
+  const showText = mobilePanel === 'text';
+  const showImage = mobilePanel === 'image';
+  const showShape = mobilePanel === 'shape';
 
   return (
     <div className="p-4 space-y-5">
       {/* Add elements */}
-      {showAdd && !mobilePanel && (
+      {showAdd && (
         <div className="space-y-2">
           <p className="text-[11px] font-semibold text-[#1a1a18]/35 uppercase tracking-wider">Добавить</p>
           <div className="flex gap-2">
@@ -1067,19 +1218,8 @@ function PropertiesPanel({
       )}
 
       {/* Shape properties */}
-      {selectedEl?.type === 'shape' && (
+      {showShape && selectedEl?.type === 'shape' && (
         <ShapePropsPanel el={selectedEl as ShapeElement} onUpdate={(u) => onUpdateElement(selectedEl.id, u)} />
-      )}
-
-      {/* Delete selected */}
-      {selectedEl && !mobilePanel && (
-        <button
-          onClick={() => onDeleteElement(selectedEl.id)}
-          className="flex items-center gap-1.5 text-[12px] text-red-400 hover:text-red-600 transition-colors touch-manipulation"
-        >
-          <Trash2 size={13} />
-          Удалить элемент
-        </button>
       )}
     </div>
   );
@@ -1648,10 +1788,18 @@ export function CarouselEditor() {
   const [mode, setMode] = useState<EditorMode>('home');
   const [aiGeneratedSlides, setAiGeneratedSlides] = useState<Slide[] | null>(null);
   const [aiOriginalImage, setAiOriginalImage] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [loadedDraft, setLoadedDraft] = useState<CarouselDraft | null>(null);
 
   const handleAiDone = useCallback((slides: Slide[], img: { base64: string; mimeType: string }) => {
     setAiGeneratedSlides(slides);
     setAiOriginalImage(img);
+    setMode('create');
+  }, []);
+
+  const handleLoadDraft = useCallback((draft: CarouselDraft) => {
+    setLoadedDraft(draft);
+    setAiGeneratedSlides(null);
+    setAiOriginalImage(null);
     setMode('create');
   }, []);
 
@@ -1683,11 +1831,12 @@ export function CarouselEditor() {
           transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="flex-1 flex flex-col overflow-hidden"
         >
-          {mode === 'home' && <HomeScreen onMode={setMode} />}
+          {mode === 'home' && <HomeScreen onMode={setMode} onLoadDraft={handleLoadDraft} />}
           {mode === 'create' && (
             <FreeEditor
-              onBack={() => { setAiGeneratedSlides(null); setAiOriginalImage(null); setMode('home'); }}
-              initialSlides={aiGeneratedSlides ?? undefined}
+              onBack={() => { setAiGeneratedSlides(null); setAiOriginalImage(null); setLoadedDraft(null); setMode('home'); }}
+              initialSlides={loadedDraft?.slides ?? aiGeneratedSlides ?? undefined}
+              initialDraftId={loadedDraft?.id}
               aiOriginalImage={aiOriginalImage ?? undefined}
             />
           )}
