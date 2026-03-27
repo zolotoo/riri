@@ -207,7 +207,7 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `API ${res.status}`);
+          throw new Error(errData.error || errData.details || `HTTP ${res.status}`);
         }
         const data = await res.json();
 

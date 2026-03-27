@@ -4,6 +4,9 @@
   "functions": {
     "api/save-media.js": {
       "maxDuration": 60
+    },
+    "api/scriptwriter.js": {
+      "maxDuration": 60
     }
   }
 }

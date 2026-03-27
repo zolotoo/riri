@@ -975,27 +975,42 @@ async function handleAnalyzeCarousel(req, res) {
 - ВАЖНО: верни все заметные мелкие детали — разделительные линии (placeholder с height: 1-2%), иконки (placeholder маленький size).
 - Верни ТОЛЬКО JSON, без пояснений, без markdown.`;
 
-  try {
-    const { text } = await callOpenRouter({
-      apiKey: OPENROUTER_API_KEY,
-      model: MODELS.FLASH,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
-            { type: 'text', text: prompt },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 800,
-    });
+  // Модели с поддержкой vision (по приоритету)
+  const VISION_MODELS = [
+    'google/gemini-2.0-flash-001',
+    'google/gemini-2.5-flash-preview',
+    'google/gemini-2.0-flash-lite-001',
+  ];
 
-    const parsed = parseJsonResponse(text);
-    return res.status(200).json(parsed);
-  } catch (err) {
-    console.error('analyze-carousel error:', err);
-    return res.status(502).json({ error: 'OpenRouter API error', details: err.message });
+  const messages = [
+    {
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
+        { type: 'text', text: prompt },
+      ],
+    },
+  ];
+
+  let lastErr = null;
+  for (const model of VISION_MODELS) {
+    try {
+      const { text } = await callOpenRouter({
+        apiKey: OPENROUTER_API_KEY,
+        model,
+        messages,
+        temperature: 0.1,
+        max_tokens: 1200,
+      });
+      if (!text) continue;
+      const parsed = parseJsonResponse(text);
+      return res.status(200).json(parsed);
+    } catch (err) {
+      console.error(`analyze-carousel error with ${model}:`, err.message);
+      lastErr = err;
+      if (err.message?.includes('429')) await new Promise(r => setTimeout(r, 1500));
+    }
   }
+
+  return res.status(502).json({ error: lastErr?.message ?? 'Vision API error' });
 }
