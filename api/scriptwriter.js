@@ -1045,14 +1045,14 @@ async function handleAnalyzeCarousel(req, res) {
           'X-Title': 'RiRi AI',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-image',
+          model: 'google/gemini-3.1-flash-image-preview',
           modalities: ['image', 'text'],
           image_config: { aspect_ratio: '3:4' },
           messages: [{
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
-              { type: 'text', text: 'I attached a photo. Delete from it all text, photo blocks, dots, icons, buttons, UI elements, watermarks — everything except the background.\n\nKeep the background exactly as-is. Preserve the exact color, texture, palette, grain, lighting — pixel-perfect identical.\n\nIf the background is a photo of a person or scene — recreate that exact photo without any overlays.\n\nOutput the image in 3:4 aspect ratio (portrait). Return only the cleaned background image, nothing else.' },
+              { type: 'text', text: 'Look at this image. Generate a new background image inspired by the colors, texture, grain, lighting, and overall mood of this photo\'s background. Do NOT include any text, words, numbers, logos, icons, buttons, UI elements, or watermarks. If the background shows a person, room, or scene — create a similar artistic scene with the same atmosphere. Output a clean 3:4 portrait background image only.' },
             ],
           }],
         }),
