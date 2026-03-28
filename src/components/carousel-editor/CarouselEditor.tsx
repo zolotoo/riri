@@ -569,11 +569,12 @@ const PRESET_GRADIENTS = [
 
 // ─── Free editor ──────────────────────────────────────────────
 
-function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: {
+function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, onUpdateOriginalImage }: {
   onBack: () => void;
   initialSlides?: Slide[];
   initialDraftId?: string;
   aiOriginalImage?: { base64: string; mimeType: string };
+  onUpdateOriginalImage?: (img: { base64: string; mimeType: string }) => void;
 }) {
   const [slides, setSlides] = useState<Slide[]>(initialSlides ?? [createDefaultSlide()]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -587,6 +588,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: 
   const canvasRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const bgImageInputRef = useRef<HTMLInputElement>(null);
+  const replaceRefInputRef = useRef<HTMLInputElement>(null);
   const replacePlaceholderInputRef = useRef<HTMLInputElement>(null);
   const pendingPlaceholderIdRef = useRef<string | null>(null);
 
@@ -727,7 +729,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: 
       const res = await fetch('/api/scriptwriter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'analyze-carousel', image_data: img.base64, mime_type: img.mimeType }),
+        body: JSON.stringify({ action: 'regen-background', image_data: img.base64, mime_type: img.mimeType }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -740,6 +742,18 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: 
       setRegenBgLoading(false);
     }
   }, [aiOriginalImage, onUpdateBackground]);
+
+  const handleReplaceRef = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = (reader.result as string).split(',')[1];
+      onUpdateOriginalImage?.({ base64: b64, mimeType: file.type });
+    };
+    reader.readAsDataURL(file);
+  }, [onUpdateOriginalImage]);
 
   const handleAddShape = useCallback(() => {
     const el = createDefaultShapeElement();
@@ -1085,6 +1099,8 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: 
                     onBgImage={() => bgImageInputRef.current?.click()}
                     onRegenBg={aiOriginalImage ? handleRegenBg : undefined}
                     regenBgLoading={regenBgLoading}
+                    aiOriginalImage={aiOriginalImage}
+                    onReplaceRef={onUpdateOriginalImage ? () => replaceRefInputRef.current?.click() : undefined}
                     onAddShape={handleAddShape}
                     mobilePanel={activePanel}
                   />
@@ -1097,6 +1113,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage }: 
 
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
       <input ref={bgImageInputRef} type="file" accept="image/*" className="hidden" onChange={handleBgImage} />
+      <input ref={replaceRefInputRef} type="file" accept="image/*" className="hidden" onChange={handleReplaceRef} />
       <input ref={replacePlaceholderInputRef} type="file" accept="image/*" className="hidden" onChange={handleReplacePlaceholderFile} />
     </div>
   );
@@ -1114,13 +1131,15 @@ interface PropertiesPanelProps {
   onBgImage: () => void;
   onRegenBg?: () => void;
   regenBgLoading?: boolean;
+  onReplaceRef?: () => void;
+  aiOriginalImage?: { base64: string; mimeType: string };
   onAddShape: () => void;
   mobilePanel: 'add' | 'bg' | 'text' | 'image' | 'shape';
 }
 
 function PropertiesPanel({
   slide, selectedEl, onUpdateBackground, onUpdateElement,
-  onAddText, onAddImage, onBgImage, onRegenBg, regenBgLoading, onAddShape, mobilePanel,
+  onAddText, onAddImage, onBgImage, onRegenBg, regenBgLoading, onReplaceRef, aiOriginalImage, onAddShape, mobilePanel,
 }: PropertiesPanelProps) {
 
   const showAdd = mobilePanel === 'add';
@@ -1284,9 +1303,42 @@ function PropertiesPanel({
             </div>
           )}
 
-          {/* Upload / regen bg */}
-          <div className="flex items-center gap-3">
-            {slide.background.type !== 'image' && (
+          {/* Референс + перегенерация */}
+          {aiOriginalImage ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-[#1a1a18]/35 uppercase tracking-wider">Референс (исходное фото)</p>
+              <div className="flex items-center gap-3">
+                <img
+                  src={`data:${aiOriginalImage.mimeType};base64,${aiOriginalImage.base64}`}
+                  alt="референс"
+                  className="w-12 h-16 object-cover rounded-lg flex-shrink-0"
+                  style={{ border: '1.5px solid rgba(0,0,0,0.08)' }}
+                />
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <button
+                    onClick={onRegenBg}
+                    disabled={regenBgLoading}
+                    className="flex items-center gap-1.5 text-[12px] text-violet-500 hover:text-violet-700 transition-colors touch-manipulation disabled:opacity-50"
+                  >
+                    {regenBgLoading
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <RefreshCw size={12} />}
+                    {regenBgLoading ? 'Генерирую фон...' : 'Перегенерировать фон'}
+                  </button>
+                  {onReplaceRef && (
+                    <button
+                      onClick={onReplaceRef}
+                      className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-700 transition-colors touch-manipulation"
+                    >
+                      <ImageIcon size={12} />
+                      Заменить фото
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
               <button
                 onClick={onBgImage}
                 className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-700 transition-colors touch-manipulation"
@@ -1294,20 +1346,8 @@ function PropertiesPanel({
                 <ImageIcon size={12} />
                 Загрузить фоновое фото
               </button>
-            )}
-            {onRegenBg && (
-              <button
-                onClick={onRegenBg}
-                disabled={regenBgLoading}
-                className="flex items-center gap-1.5 text-[12px] text-violet-500 hover:text-violet-700 transition-colors touch-manipulation disabled:opacity-50"
-              >
-                {regenBgLoading
-                  ? <Loader2 size={12} className="animate-spin" />
-                  : <RefreshCw size={12} />}
-                {regenBgLoading ? 'Генерирую...' : 'Перегенерировать'}
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1984,6 +2024,7 @@ export function CarouselEditor() {
               initialSlides={loadedDraft?.slides ?? aiGeneratedSlides ?? undefined}
               initialDraftId={loadedDraft?.id}
               aiOriginalImage={aiOriginalImage ?? undefined}
+              onUpdateOriginalImage={(img) => setAiOriginalImage(img)}
             />
           )}
           {mode === 'template' && <TemplateEditor onBack={() => setMode('home')} />}

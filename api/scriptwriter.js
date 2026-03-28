@@ -47,6 +47,8 @@ export default async function handler(req, res) {
       return handleQuickGenerate(req, res);
     case 'analyze-carousel':
       return handleAnalyzeCarousel(req, res);
+    case 'regen-background':
+      return handleRegenBackground(req, res);
     case 'refine-carousel':
       return handleRefineCarousel(req, res);
     default:
@@ -1170,6 +1172,81 @@ x=0 — левый край, x=1080 — правый. y=0 — верх, y=1440 �
   await bgPromise;
 
   return res.status(200).json(parsed);
+}
+
+// ─── regen-background ─────────────────────────────────────────────────────────
+// Только генерация фона — без полного анализа. 3 попытки.
+
+async function handleRegenBackground(req, res) {
+  const { image_data, mime_type } = req.body ?? {};
+  if (!image_data || !mime_type) return res.status(400).json({ error: 'image_data and mime_type required' });
+
+  const bgBody = JSON.stringify({
+    model: 'google/gemini-2.5-flash-image',
+    modalities: ['image', 'text'],
+    stream: true,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:${mime_type};base64,${image_data}` } },
+        { type: 'text', text: 'я прикрепил тебе фото. удали на нем все текста, блоки с фото, точки, все, кроме фона.\n\nсохрани точь в точь фон и дай мне только его. сохрани цвет, текстуру, палитру точь в точь.\n\nесли фоном является фото - создай это же фото.\n\nсделай фото размером 3 на 4.' },
+      ],
+    }],
+  });
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const genRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://ririrai.vercel.app',
+        'X-Title': 'RiRi AI',
+      },
+      body: bgBody,
+    });
+
+    console.log(`regen-background attempt ${attempt} HTTP:`, genRes.status);
+    const rawText = await genRes.text();
+    const lines = rawText.split('\n');
+    const base64Chunks = [];
+    let imageMime = 'image/png';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+      try {
+        const chunk = JSON.parse(line.slice(6));
+        const delta = chunk?.choices?.[0]?.delta;
+        if (delta?.images?.length > 0) {
+          const url = delta.images[0]?.image_url?.url;
+          if (url?.startsWith('data:')) {
+            const [meta, b64] = url.split(',');
+            const mime = meta.replace('data:', '').replace(';base64', '');
+            if (mime) imageMime = mime;
+            if (b64) base64Chunks.push(b64);
+          }
+        }
+        if (Array.isArray(delta?.content)) {
+          for (const part of delta.content) {
+            if (part?.type === 'image_url' && part?.image_url?.url?.startsWith('data:')) {
+              const [meta, b64] = part.image_url.url.split(',');
+              const mime = meta.replace('data:', '').replace(';base64', '');
+              if (mime) imageMime = mime;
+              if (b64) base64Chunks.push(b64);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    console.log(`regen-background attempt ${attempt}: base64 parts=${base64Chunks.length}`);
+    if (base64Chunks.length > 0) {
+      return res.status(200).json({ background: { type: 'image', src: `data:${imageMime};base64,${base64Chunks.join('')}` } });
+    }
+    console.warn(`regen-background attempt ${attempt}: no image. Raw:`, rawText.slice(0, 300));
+  }
+
+  return res.status(502).json({ error: 'Не удалось сгенерировать фон после 3 попыток' });
 }
 
 // ─── refine-carousel ──────────────────────────────────────────────────────────
