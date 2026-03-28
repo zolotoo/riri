@@ -342,6 +342,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const removeResponsibleRow = (id: string) => setResponsibles(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
   const updateResponsibleRow = (id: string, field: 'label' | 'value', value: string) =>
     setResponsibles(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const [openResponsibleDropdown, setOpenResponsibleDropdown] = useState<string | null>(null);
 
   const handleSaveLinks = async () => {
     if (!currentProject?.id) {
@@ -1725,19 +1726,49 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                         placeholder="Роль"
                         className="flex-shrink-0 w-24 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
                       />
-                      <input
-                        type="text"
-                        list={`participants-${row.id}`}
-                        value={row.value}
-                        onChange={(e) => updateResponsibleRow(row.id, 'value', e.target.value)}
-                        placeholder={participants.length > 0 ? 'Выбери из команды' : 'Имя / @логин'}
-                        className="flex-1 min-w-0 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200/60 focus:border-indigo-400/50"
-                      />
-                      <datalist id={`participants-${row.id}`}>
-                        {participants.map(p => (
-                          <option key={p} value={p} />
-                        ))}
-                      </datalist>
+                      <div className="relative flex-1 min-w-0">
+                        <input
+                          type="text"
+                          value={row.value}
+                          onChange={(e) => {
+                            updateResponsibleRow(row.id, 'value', e.target.value);
+                            setOpenResponsibleDropdown(row.id);
+                          }}
+                          onFocus={() => participants.length > 0 && setOpenResponsibleDropdown(row.id)}
+                          onBlur={() => setTimeout(() => setOpenResponsibleDropdown(null), 150)}
+                          placeholder={participants.length > 0 ? 'Выбери из команды' : 'Имя / @логин'}
+                          className="w-full px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
+                        />
+                        {openResponsibleDropdown === row.id && (() => {
+                          const filter = row.value.trim().toLowerCase();
+                          const filtered = filter
+                            ? participants.filter(p => p.toLowerCase().includes(filter))
+                            : participants;
+                          return filtered.length > 0 ? (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-[200] rounded-card-xl bg-glass-white/95 backdrop-blur-glass-xl border border-white/[0.35] shadow-glass-lg overflow-hidden max-h-[180px] overflow-y-auto custom-scrollbar-light">
+                              <div className="p-1 space-y-0.5">
+                                {filtered.map(p => (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                      updateResponsibleRow(row.id, 'value', p);
+                                      setOpenResponsibleDropdown(null);
+                                    }}
+                                    className="w-full text-left flex items-center gap-2 px-2.5 py-2 min-h-[40px] rounded-xl hover:bg-slate-100/70 active:bg-slate-200/70 transition-colors touch-manipulation"
+                                  >
+                                    <div className="w-6 h-6 rounded-full bg-slate-200/80 flex items-center justify-center text-[9px] font-bold text-slate-500 flex-shrink-0">
+                                      {p.replace('@', '').slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <span className="text-xs text-slate-700 truncate">{p}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                     </div>
                     {/* Delete button — only for admin/owner */}
                     {isAdminOrOwner && (
