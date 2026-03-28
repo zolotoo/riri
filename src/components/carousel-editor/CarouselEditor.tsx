@@ -6,7 +6,7 @@ import {
   ArrowLeft, PenLine, LayoutTemplate, Type, Image as ImageIcon,
   Bold, Italic, AlignLeft, AlignCenter, AlignRight,
   Loader2, Camera, Sparkles, Box, Copy, Minus, Circle as CircleIcon,
-  Square, RefreshCw, BookmarkPlus, FolderOpen,
+  Square, RefreshCw, BookmarkPlus, FolderOpen, Link,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../utils/cn';
@@ -67,7 +67,7 @@ function GlassCard({ children, className }: { children: React.ReactNode; classNa
 
 // ─── Mode ────────────────────────────────────────────────────
 
-type EditorMode = 'home' | 'create' | 'template' | 'ai-photo';
+type EditorMode = 'home' | 'create' | 'template' | 'ai-photo' | 'ai-url';
 
 // ─── Home screen ─────────────────────────────────────────────
 
@@ -137,6 +137,19 @@ function HomeScreen({ onMode, onLoadDraft }: { onMode: (m: EditorMode) => void; 
               iconBg: 'linear-gradient(135deg, #1a1a18 0%, #2c2c28 100%)',
               title: 'Создать по фото',
               desc: 'Загрузи скриншот — ИИ воспроизведёт дизайн',
+              badge: 'ИИ',
+            },
+            {
+              delay: 0.2, mode: 'ai-url' as EditorMode,
+              icon: (
+                <div className="relative">
+                  <Link size={19} className="text-white" />
+                  <Sparkles size={9} className="text-white/70 absolute -top-1 -right-1" />
+                </div>
+              ),
+              iconBg: 'linear-gradient(135deg, #833ab4 0%, #c13584 100%)',
+              title: 'По ссылке Instagram',
+              desc: 'Вставь ссылку — ИИ воссоздаст всю карусель',
               badge: 'ИИ',
             },
           ].map(({ delay, mode, icon, iconBg, title, desc, badge }) => (
@@ -299,122 +312,7 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
         }
         const data = await res.json();
 
-        const { background, elements = [] } = data as {
-          background: { type: string; color?: string; from?: string; to?: string; direction?: string; src?: string };
-          elements: Array<{
-            type: string; text?: string; x: number; y: number;
-            fontSize?: number; fontWeight?: number; color?: string;
-            textAlign?: string; width?: number; fontFamily?: string;
-            fontStyle?: string; rotation?: number; lineHeight?: number; letterSpacing?: number;
-            label?: string; borderRadius?: number; height?: number;
-            shapeType?: string; fill?: string; stroke?: string; strokeWidth?: number; opacity?: number;
-            zIndex?: number;
-          }>;
-        };
-
-        // AI теперь возвращает пиксели на холсте 1080×1440 → конвертируем в %
-        const px2x = (px: number) => Math.max(0, Math.min(94, (px / 1080) * 100));
-        const px2y = (px: number) => Math.max(0, Math.min(94, (px / 1350) * 100));
-        const px2w = (px: number) => Math.max(5, Math.min(100, (px / 1080) * 100));
-        const px2h = (px: number) => Math.max(1, Math.min(100, (px / 1440) * 100));
-
-        // Маппинг fontFamily от AI к реальным CSS-шрифтам
-        const FONT_MAP: Record<string, string> = {
-          'serif':        "'Playfair Display', serif",
-          'italic-serif': "'Playfair Display', serif",
-          'sans-serif':   'Inter, sans-serif',
-          'heavy-sans':   'Montserrat, sans-serif',
-          'display':      "'Bebas Neue', cursive",
-          'monospace':    'monospace',
-        };
-
-        // Фон: API вернул сгенерированное изображение → используем его
-        //      API вернул type='image' без src → fallback на скриншот
-        //      API вернул solid/gradient → используем CSS
-        let resolvedBg: import('./types').SlideBackground;
-        if (background?.type === 'image' && background.src) {
-          resolvedBg = { type: 'image', src: background.src };
-        } else if (background?.type === 'gradient' && background.from && background.to) {
-          resolvedBg = { type: 'gradient', from: background.from, to: background.to, direction: background.direction ?? 'to bottom' };
-        } else {
-          resolvedBg = { type: 'solid', color: background.color ?? '#f5f5f4' };
-        }
-
-        const newSlide = createDefaultSlide();
-        newSlide.background = resolvedBg;
-        newSlide.elements = elements.flatMap((el): SlideElement[] => {
-          if (el.type === 'text') {
-            return [createDefaultTextElement({
-              text: el.text ?? 'Текст',
-              position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 115) },
-              fontSize: Math.max(24, Math.min(220, el.fontSize ?? 48)),
-              fontWeight: ([400, 700, 800, 900] as number[]).includes(el.fontWeight ?? 0) ? el.fontWeight! : 700,
-              color: el.color ?? '#1a1a18',
-              textAlign: (['left', 'center', 'right'].includes(el.textAlign ?? '') ? el.textAlign : 'left') as 'left' | 'center' | 'right',
-              width: px2w(el.width ?? 900),
-              fontFamily: FONT_MAP[el.fontFamily ?? ''] ?? 'Inter, sans-serif',
-              fontStyle: el.fontStyle === 'italic' ? 'italic' : 'normal',
-              rotation: typeof el.rotation === 'number' ? el.rotation : 0,
-              lineHeight: typeof el.lineHeight === 'number' ? Math.max(0.8, Math.min(2.5, el.lineHeight)) : 1.3,
-              letterSpacing: typeof el.letterSpacing === 'number' ? Math.max(-0.1, Math.min(0.5, el.letterSpacing)) : 0,
-              zIndex: el.zIndex ?? 2,
-            })];
-          }
-          if (el.type === 'placeholder') {
-            return [createDefaultPlaceholderElement({
-              position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 800) },
-              size: { width: px2w(el.width ?? 908), height: px2h(el.height ?? 500) },
-              label: el.label ?? 'Фото',
-              borderRadius: el.borderRadius ?? 16,
-              zIndex: el.zIndex ?? 1,
-            })];
-          }
-          if (el.type === 'shape') {
-            const validShapeTypes = ['rect', 'circle', 'line', 'arrow'] as const;
-            const rawType = el.shapeType ?? 'rect';
-            const shapeType = validShapeTypes.includes(rawType as typeof validShapeTypes[number])
-              ? rawType as typeof validShapeTypes[number]
-              : 'rect';
-            return [createDefaultShapeElement({
-              position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 400) },
-              size: { width: px2w(el.width ?? 400), height: px2h(el.height ?? 140) },
-              shapeType,
-              fill: el.fill ?? 'transparent',
-              stroke: el.stroke ?? '#ffffff',
-              strokeWidth: el.strokeWidth ?? 2,
-              borderRadius: el.borderRadius ?? 0,
-              opacity: typeof el.opacity === 'number' ? el.opacity : 1,
-              zIndex: el.zIndex ?? 1,
-            })];
-          }
-          return [];
-        });
-
-        // ── Smart post-processing ──────────────────────────────────────
-        // Центрируем pill-кнопки (rect с большим borderRadius) и текст внутри них
-        newSlide.elements = newSlide.elements.map((el) => {
-          if (el.type !== 'shape') return el;
-          const s = el as import('./types').ShapeElement;
-          if (s.shapeType !== 'rect' || s.borderRadius < 30) return el;
-          // Pill/oval — центрируем горизонтально
-          const centeredX = Math.max(0, (100 - s.size.width) / 2);
-          return { ...s, position: { ...s.position, x: centeredX } };
-        }).map((el) => {
-          if (el.type !== 'text') return el;
-          const t = el as import('./types').TextElement;
-          // Ищем pill-shape на том же уровне по Y (±8% в %-пространстве)
-          const pill = newSlide.elements.find((e) => {
-            if (e.type !== 'shape') return false;
-            const s = e as import('./types').ShapeElement;
-            return s.shapeType === 'rect' && s.borderRadius >= 30
-              && Math.abs(s.position.y - t.position.y) < 8;
-          }) as import('./types').ShapeElement | undefined;
-          if (!pill) return el;
-          // Текст внутри pill — центрируем
-          const pillCenterX = pill.position.x + pill.size.width / 2;
-          return { ...t, position: { ...t.position, x: Math.max(0, pillCenterX - t.width / 2) }, textAlign: 'center' as const };
-        });
-
+        const newSlide = convertAiSlideData(data as Parameters<typeof convertAiSlideData>[0]);
         onDone([newSlide], { base64, mimeType });
       } catch (err) {
         console.error('AI analyze error:', err);
@@ -513,6 +411,243 @@ function AiPhotoScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides
           className="hidden"
           onChange={handleFileChange}
         />
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Shared: convert raw AI slide data → Slide ───────────────
+
+function convertAiSlideData(data: {
+  background: { type: string; color?: string; from?: string; to?: string; direction?: string; src?: string };
+  elements: Array<{
+    type: string; text?: string; x: number; y: number;
+    fontSize?: number; fontWeight?: number; color?: string;
+    textAlign?: string; width?: number; fontFamily?: string;
+    fontStyle?: string; rotation?: number; lineHeight?: number; letterSpacing?: number;
+    label?: string; borderRadius?: number; height?: number;
+    shapeType?: string; fill?: string; stroke?: string; strokeWidth?: number; opacity?: number;
+    zIndex?: number;
+  }>;
+}): Slide {
+  const px2x = (px: number) => Math.max(0, Math.min(94, (px / 1080) * 100));
+  const px2y = (px: number) => Math.max(0, Math.min(94, (px / 1350) * 100));
+  const px2w = (px: number) => Math.max(5, Math.min(100, (px / 1080) * 100));
+  const px2h = (px: number) => Math.max(1, Math.min(100, (px / 1440) * 100));
+
+  const FONT_MAP: Record<string, string> = {
+    'serif':        "'Playfair Display', serif",
+    'italic-serif': "'Playfair Display', serif",
+    'sans-serif':   'Inter, sans-serif',
+    'heavy-sans':   'Montserrat, sans-serif',
+    'display':      "'Bebas Neue', cursive",
+    'monospace':    'monospace',
+  };
+
+  const { background, elements = [] } = data;
+  let resolvedBg: import('./types').SlideBackground;
+  if (background?.type === 'image' && background.src) {
+    resolvedBg = { type: 'image', src: background.src };
+  } else if (background?.type === 'gradient' && background.from && background.to) {
+    resolvedBg = { type: 'gradient', from: background.from, to: background.to, direction: background.direction ?? 'to bottom' };
+  } else {
+    resolvedBg = { type: 'solid', color: background?.color ?? '#f5f5f4' };
+  }
+
+  const slide = createDefaultSlide();
+  slide.background = resolvedBg;
+  slide.elements = elements.flatMap((el): SlideElement[] => {
+    if (el.type === 'text') {
+      return [createDefaultTextElement({
+        text: el.text ?? 'Текст',
+        position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 115) },
+        fontSize: Math.max(24, Math.min(220, el.fontSize ?? 48)),
+        fontWeight: ([400, 700, 800, 900] as number[]).includes(el.fontWeight ?? 0) ? el.fontWeight! : 700,
+        color: el.color ?? '#1a1a18',
+        textAlign: (['left', 'center', 'right'].includes(el.textAlign ?? '') ? el.textAlign : 'left') as 'left' | 'center' | 'right',
+        width: px2w(el.width ?? 900),
+        fontFamily: FONT_MAP[el.fontFamily ?? ''] ?? 'Inter, sans-serif',
+        fontStyle: el.fontStyle === 'italic' ? 'italic' : 'normal',
+        rotation: typeof el.rotation === 'number' ? el.rotation : 0,
+        lineHeight: typeof el.lineHeight === 'number' ? Math.max(0.8, Math.min(2.5, el.lineHeight)) : 1.3,
+        letterSpacing: typeof el.letterSpacing === 'number' ? Math.max(-0.1, Math.min(0.5, el.letterSpacing)) : 0,
+        zIndex: el.zIndex ?? 2,
+      })];
+    }
+    if (el.type === 'placeholder') {
+      return [createDefaultPlaceholderElement({
+        position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 800) },
+        size: { width: px2w(el.width ?? 908), height: px2h(el.height ?? 500) },
+        label: el.label ?? 'Фото',
+        borderRadius: el.borderRadius ?? 16,
+        zIndex: el.zIndex ?? 1,
+      })];
+    }
+    if (el.type === 'shape') {
+      const validShapeTypes = ['rect', 'circle', 'line', 'arrow'] as const;
+      const rawType = el.shapeType ?? 'rect';
+      const shapeType = validShapeTypes.includes(rawType as typeof validShapeTypes[number]) ? rawType as typeof validShapeTypes[number] : 'rect';
+      return [createDefaultShapeElement({
+        position: { x: px2x(el.x ?? 86), y: px2y(el.y ?? 400) },
+        size: { width: px2w(el.width ?? 400), height: px2h(el.height ?? 140) },
+        shapeType, fill: el.fill ?? 'transparent', stroke: el.stroke ?? '#ffffff',
+        strokeWidth: el.strokeWidth ?? 2, borderRadius: el.borderRadius ?? 0,
+        opacity: typeof el.opacity === 'number' ? el.opacity : 1,
+        zIndex: el.zIndex ?? 1,
+      })];
+    }
+    return [];
+  });
+
+  // Smart post-processing: центрируем pill-кнопки
+  slide.elements = slide.elements.map((el) => {
+    if (el.type !== 'shape') return el;
+    const s = el as import('./types').ShapeElement;
+    if (s.shapeType !== 'rect' || s.borderRadius < 30) return el;
+    return { ...s, position: { ...s.position, x: Math.max(0, (100 - s.size.width) / 2) } };
+  }).map((el) => {
+    if (el.type !== 'text') return el;
+    const t = el as import('./types').TextElement;
+    const pill = slide.elements.find((e) => {
+      if (e.type !== 'shape') return false;
+      const s = e as import('./types').ShapeElement;
+      return s.shapeType === 'rect' && s.borderRadius >= 30 && Math.abs(s.position.y - t.position.y) < 8;
+    }) as import('./types').ShapeElement | undefined;
+    if (!pill) return el;
+    const pillCenterX = pill.position.x + pill.size.width / 2;
+    return { ...t, position: { ...t.position, x: Math.max(0, pillCenterX - t.width / 2) }, textAlign: 'center' as const };
+  });
+
+  return slide;
+}
+
+// ─── AiUrlScreen ─────────────────────────────────────────────
+
+function AiUrlScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: Slide[]) => void }) {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = useCallback(async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setLoading(true);
+    setError(null);
+    setProgress('Получаю слайды из Instagram...');
+    try {
+      const res = await fetch('/api/scriptwriter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'analyze-carousel-from-url', instagram_url: trimmed }),
+      });
+      setProgress('Анализирую каждый слайд...');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const rawSlides = data.slides as Array<{
+        background: { type: string; color?: string; from?: string; to?: string; direction?: string; src?: string };
+        elements: any[];
+      }>;
+      if (!rawSlides?.length) throw new Error('Слайды не получены');
+      const slides = rawSlides.map(convertAiSlideData);
+      onDone(slides);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Ошибка: ${msg}`);
+    } finally {
+      setLoading(false);
+      setProgress('');
+    }
+  }, [url, onDone]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="flex-1 flex flex-col overflow-y-auto px-4 custom-scrollbar-light"
+    >
+      <div className="max-w-2xl mx-auto w-full py-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-[14px] text-[#1a1a18]/50 hover:text-[#1a1a18] transition-colors touch-manipulation">
+            <ArrowLeft size={16} />
+            Назад
+          </button>
+          <h2 className="text-[17px] font-semibold text-[#1a1a18]">По ссылке Instagram</h2>
+        </div>
+
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #833ab4 0%, #c13584 100%)' }}>
+              <Link size={18} className="text-white" />
+            </div>
+            <p className="text-[14px] font-semibold text-[#1a1a18]">Как это работает</p>
+          </div>
+          <div className="space-y-3">
+            {[
+              'Вставь ссылку на карусель Instagram (пост или рилс)',
+              'ИИ скачает все слайды и воссоздаст каждый',
+              'Получаешь полностью редактируемую карусель',
+            ].map((step, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ background: 'linear-gradient(135deg, #833ab4 0%, #c13584 100%)' }}>
+                  <span className="text-[11px] font-bold text-white">{i + 1}</span>
+                </div>
+                <p className="text-[13px] text-[#1a1a18]/60 leading-snug">{step}</p>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4">
+          <p className="text-[11px] font-semibold text-[#1a1a18]/35 uppercase tracking-wider mb-2">Ссылка на карусель</p>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://www.instagram.com/p/..."
+            className="w-full rounded-xl px-3 py-2.5 text-[14px] text-[#1a1a18] outline-none border border-[#1a1a18]/10 focus:border-[#833ab4]/50 bg-white/60 transition-colors"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !loading) handleGenerate(); }}
+            disabled={loading}
+          />
+          {loading && progress && (
+            <p className="text-[12px] text-[#833ab4] mt-2 flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" />
+              {progress}
+            </p>
+          )}
+        </GlassCard>
+
+        <button
+          onClick={handleGenerate}
+          disabled={loading || !url.trim()}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 text-[15px] font-medium text-white transition-all active:scale-95 touch-manipulation',
+            loading || !url.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
+          )}
+          style={{ background: 'linear-gradient(135deg, #833ab4 0%, #c13584 100%)', boxShadow: '0 1px 6px rgba(131,58,180,0.35)' }}
+        >
+          {loading ? (
+            <><Loader2 size={16} className="animate-spin" />Воссоздаю карусель...</>
+          ) : (
+            <><Sparkles size={16} />Воссоздать карусель</>
+          )}
+        </button>
+
+        {error && <p className="text-[13px] text-red-500 text-center">{error}</p>}
+
+        <GlassCard className="p-3">
+          <p className="text-[11px] text-[#1a1a18]/40 leading-relaxed">
+            💡 Работает с публичными постами Instagram. Ссылка вида{' '}
+            <span className="font-mono text-[10px]">instagram.com/p/XXX</span> или{' '}
+            <span className="font-mono text-[10px]">instagram.com/reel/XXX</span>
+          </p>
+        </GlassCard>
       </div>
     </motion.div>
   );
@@ -2159,6 +2294,12 @@ export function CarouselEditor() {
             <AiPhotoScreen
               onBack={() => setMode('home')}
               onDone={handleAiDone}
+            />
+          )}
+          {mode === 'ai-url' && (
+            <AiUrlScreen
+              onBack={() => setMode('home')}
+              onDone={(slides) => { setAiGeneratedSlides(slides); setAiOriginalImage(null); setMode('create'); }}
             />
           )}
         </motion.div>
