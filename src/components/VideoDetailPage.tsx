@@ -24,6 +24,8 @@ import { useProjectContext } from '../contexts/ProjectContext';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
 import type { ProjectTemplateItem, ProjectStyle, DescriptionTemplate } from '../hooks/useProjects';
 import { useVideoComments } from '../hooks/useVideoComments';
+import { useParticipantsForResponsibles } from '../hooks/useParticipantsForResponsibles';
+import { useProjectMembers } from '../hooks/useProjectMembers';
 import { calculateViralMultiplier, getOrUpdateProfileStats, applyViralMultiplierToCoefficient } from '../services/profileStatsService';
 import { isRussian } from '../utils/language';
 import { TokenBadge } from './ui/TokenBadge';
@@ -206,6 +208,12 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const { user } = useAuth();
   const radarUserId = user?.id || 'anonymous';
   const { profiles: radarProfiles, addProfile: addRadarProfile } = useRadar(currentProjectId, radarUserId);
+  const { members: projectMembersList } = useProjectMembers(currentProjectId);
+  const participants = useParticipantsForResponsibles(currentProjectId);
+  const isAdminOrOwner = !!user?.id && (
+    user.id === currentProject?.owner_id ||
+    projectMembersList.some(m => m.user_id === user.id && m.role === 'admin' && m.status === 'active')
+  );
 
   // Стиль сценария проекта: обучение по примерам + генерация по стилю + просмотр/редактирование промта
   const [showStyleTrainModal, setShowStyleTrainModal] = useState(false);
@@ -1621,30 +1629,69 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
               </div>
               <div className="space-y-2">
                 {links.map((row) => (
-                  <div key={row.id} className="flex gap-2 items-start">
-                    <input
-                      type="text"
-                      value={row.label}
-                      onChange={(e) => updateLinkRow(row.id, 'label', e.target.value)}
-                      placeholder="Название"
-                      className="flex-shrink-0 w-24 px-2 py-1.5 rounded-lg border border-slate-200/80 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
-                    />
-                    <input
-                      type="text"
-                      value={row.value}
-                      onChange={(e) => updateLinkRow(row.id, 'value', e.target.value)}
-                      placeholder="URL"
-                      className="flex-1 min-w-0 px-2 py-1.5 rounded-lg border border-slate-200/80 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeLinkRow(row.id)}
-                      disabled={links.length <= 1}
-                      className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center touch-manipulation"
-                      title="Удалить пункт"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div
+                    key={row.id}
+                    className="rounded-2xl p-2 space-y-1.5"
+                    style={{
+                      background: 'rgba(255,255,255,0.55)',
+                      border: '1px solid rgba(255,255,255,0.75)',
+                      boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+                    }}
+                  >
+                    {/* Inputs */}
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={row.label}
+                        onChange={(e) => updateLinkRow(row.id, 'label', e.target.value)}
+                        placeholder="Название"
+                        className="flex-shrink-0 w-24 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
+                      />
+                      <input
+                        type="text"
+                        value={row.value}
+                        onChange={(e) => updateLinkRow(row.id, 'value', e.target.value)}
+                        placeholder="URL"
+                        className="flex-1 min-w-0 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
+                      />
+                    </div>
+                    {/* Action buttons */}
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => row.value && window.open(row.value, '_blank')}
+                        disabled={!row.value?.trim()}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 min-h-[36px] rounded-xl text-[11px] font-semibold transition-all touch-manipulation disabled:opacity-35 disabled:pointer-events-none"
+                        style={{
+                          background: row.value?.trim()
+                            ? 'linear-gradient(135deg, rgba(10,132,255,0.15) 0%, rgba(10,132,255,0.1) 100%)'
+                            : 'rgba(148,163,184,0.08)',
+                          border: row.value?.trim()
+                            ? '1px solid rgba(10,132,255,0.3)'
+                            : '1px solid rgba(148,163,184,0.2)',
+                          color: row.value?.trim() ? '#0A84FF' : '#94a3b8',
+                        }}
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Открыть
+                      </button>
+                      {isAdminOrOwner && (
+                        <button
+                          type="button"
+                          onClick={() => removeLinkRow(row.id)}
+                          disabled={links.length <= 1}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 min-h-[36px] rounded-xl text-[11px] font-semibold transition-all touch-manipulation disabled:opacity-35 disabled:pointer-events-none"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(255,59,48,0.12) 0%, rgba(255,59,48,0.08) 100%)',
+                            border: '1px solid rgba(255,59,48,0.25)',
+                            color: '#FF3B30',
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Удалить
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1674,30 +1721,55 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
               </div>
               <div className="space-y-2">
                 {responsibles.map((row) => (
-                  <div key={row.id} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      value={row.label}
-                      onChange={(e) => updateResponsibleRow(row.id, 'label', e.target.value)}
-                      placeholder="Роль (название)"
-                      className="flex-shrink-0 w-28 px-2 py-1.5 rounded-lg border border-slate-200/80 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
-                    />
-                    <input
-                      type="text"
-                      value={row.value}
-                      onChange={(e) => updateResponsibleRow(row.id, 'value', e.target.value)}
-                      placeholder="Имя"
-                      className="flex-1 min-w-0 px-2 py-1.5 rounded-lg border border-slate-200/80 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeResponsibleRow(row.id)}
-                      disabled={responsibles.length <= 1}
-                      className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center touch-manipulation"
-                      title="Удалить пункт"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div
+                    key={row.id}
+                    className="rounded-2xl p-2 space-y-1.5"
+                    style={{
+                      background: 'rgba(255,255,255,0.55)',
+                      border: '1px solid rgba(255,255,255,0.75)',
+                      boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
+                    }}
+                  >
+                    {/* Label + person picker */}
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={row.label}
+                        onChange={(e) => updateResponsibleRow(row.id, 'label', e.target.value)}
+                        placeholder="Роль"
+                        className="flex-shrink-0 w-24 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-slate-200/50 focus:border-slate-400/50"
+                      />
+                      <input
+                        type="text"
+                        list={`participants-${row.id}`}
+                        value={row.value}
+                        onChange={(e) => updateResponsibleRow(row.id, 'value', e.target.value)}
+                        placeholder={participants.length > 0 ? 'Выбери из команды' : 'Имя / @логин'}
+                        className="flex-1 min-w-0 px-2 py-1.5 rounded-xl border border-slate-200/70 bg-white/80 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200/60 focus:border-indigo-400/50"
+                      />
+                      <datalist id={`participants-${row.id}`}>
+                        {participants.map(p => (
+                          <option key={p} value={p} />
+                        ))}
+                      </datalist>
+                    </div>
+                    {/* Delete button — only for admin/owner */}
+                    {isAdminOrOwner && (
+                      <button
+                        type="button"
+                        onClick={() => removeResponsibleRow(row.id)}
+                        disabled={responsibles.length <= 1}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 min-h-[36px] rounded-xl text-[11px] font-semibold transition-all touch-manipulation disabled:opacity-35 disabled:pointer-events-none"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(255,59,48,0.12) 0%, rgba(255,59,48,0.08) 100%)',
+                          border: '1px solid rgba(255,59,48,0.25)',
+                          color: '#FF3B30',
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
