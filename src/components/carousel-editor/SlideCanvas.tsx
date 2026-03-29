@@ -341,8 +341,13 @@ function TextElementView({ el, selected, editing, scale, onSelect, onStartEdit, 
         <div
           className="absolute left-0 z-40 select-none"
           style={{ bottom: 'calc(100% + 6px)' }}
-          onMouseDown={(e) => e.preventDefault()}
-          onPointerDown={(e) => e.preventDefault()}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Сохраняем выделение сразу при касании тулбара
+            saveSelection();
+          }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
         >
           <div
             className="flex flex-col gap-1.5 px-2 py-2 rounded-2xl"
@@ -350,10 +355,10 @@ function TextElementView({ el, selected, editing, scale, onSelect, onStartEdit, 
           >
             {/* Row 1: Bold / Italic / remove */}
             <div className="flex items-center gap-0.5">
-              <button className="px-2 py-1 text-white rounded-lg text-[12px] font-bold hover:bg-white/20 transition-colors" onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }}>B</button>
-              <button className="px-2 py-1 text-white rounded-lg text-[12px] italic hover:bg-white/20 transition-colors" onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic'); }}>I</button>
+              <button className="px-2 py-1 text-white rounded-lg text-[12px] font-bold hover:bg-white/20 transition-colors" onPointerDown={(e) => { e.preventDefault(); restoreSelection(); document.execCommand('bold'); }}>B</button>
+              <button className="px-2 py-1 text-white rounded-lg text-[12px] italic hover:bg-white/20 transition-colors" onPointerDown={(e) => { e.preventDefault(); restoreSelection(); document.execCommand('italic'); }}>I</button>
               <div className="w-px h-3 bg-white/15 mx-1" />
-              <button className="px-1.5 py-1 text-white/60 rounded-lg text-[10px] hover:bg-white/20 transition-colors" onMouseDown={(e) => { e.preventDefault(); document.execCommand('removeFormat'); }} title="Сбросить форматирование">✕</button>
+              <button className="px-1.5 py-1 text-white/60 rounded-lg text-[10px] hover:bg-white/20 transition-colors" onPointerDown={(e) => { e.preventDefault(); restoreSelection(); document.execCommand('removeFormat'); }} title="Сбросить">✕</button>
             </div>
 
             {/* Row 2: Text color (A) */}
@@ -368,13 +373,12 @@ function TextElementView({ el, selected, editing, scale, onSelect, onStartEdit, 
                     border: c === '#ffffff' ? '1.5px solid rgba(255,255,255,0.25)' : '1.5px solid transparent',
                     boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
                   }}
-                  onMouseDown={(e) => { e.preventDefault(); document.execCommand('foreColor', false, c); }}
+                  onPointerDown={(e) => { e.preventDefault(); restoreSelection(); document.execCommand('foreColor', false, c); }}
                 />
               ))}
               <label
                 style={{ width: 16, height: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 title="Свой цвет"
-                onMouseDown={(e) => { e.preventDefault(); saveSelection(); }}
               >
                 <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.5)', lineHeight: 1 }}>+</span>
                 <input type="color" className="sr-only" onChange={(e) => { restoreSelection(); document.execCommand('foreColor', false, e.target.value); }} />
@@ -402,10 +406,10 @@ function TextElementView({ el, selected, editing, scale, onSelect, onStartEdit, 
                     border: color === 'transparent' ? '1.5px dashed rgba(255,255,255,0.3)' : '1.5px solid transparent',
                     boxShadow: color === 'transparent' ? 'none' : '0 0 0 1px rgba(0,0,0,0.15)',
                   }}
-                  onMouseDown={(e) => {
+                  onPointerDown={(e) => {
                     e.preventDefault();
+                    restoreSelection();
                     if (color === 'transparent') {
-                      // Remove highlight only: set to inherit/transparent
                       document.execCommand('hiliteColor', false, 'transparent');
                       document.execCommand('backColor', false, 'transparent');
                     } else {
