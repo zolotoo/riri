@@ -246,11 +246,6 @@ function TextElementView({ el, selected, editing, scale, onSelect, onStartEdit, 
     return () => document.removeEventListener('selectionchange', track);
   }, [editing]);
 
-  const saveSelection = useCallback(() => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
-  }, []);
-
   const restoreSelection = useCallback(() => {
     if (!textRef.current || !savedRangeRef.current) return;
     textRef.current.focus();
