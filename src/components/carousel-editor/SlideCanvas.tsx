@@ -837,18 +837,10 @@ export const SlideCanvas = forwardRef<HTMLDivElement, SlideCanvasProps>(
 
         {/* ── Snap guide lines ── */}
         {draggingId && guides.v.map((x) => (
-          <div key={`v${x}`} className="absolute inset-y-0 pointer-events-none" style={{ left: `${x}%`, width: 1, background: 'rgba(99,102,241,0.75)', zIndex: 200 }}>
-            <div style={{ position: 'absolute', top: '50%', left: -14, transform: 'translateY(-50%)', background: 'rgba(99,102,241,0.9)', color: '#fff', fontSize: 8, fontWeight: 700, padding: '1px 3px', borderRadius: 3, whiteSpace: 'nowrap' }}>
-              {x === 50 ? '⊕' : `${Math.round(x)}%`}
-            </div>
-          </div>
+          <div key={`v${x}`} className="absolute inset-y-0 pointer-events-none" style={{ left: `${x}%`, width: 1, background: 'rgba(99,102,241,0.75)', zIndex: 200 }} />
         ))}
         {draggingId && guides.h.map((y) => (
-          <div key={`h${y}`} className="absolute inset-x-0 pointer-events-none" style={{ top: `${y}%`, height: 1, background: 'rgba(99,102,241,0.75)', zIndex: 200 }}>
-            <div style={{ position: 'absolute', left: '50%', top: -10, transform: 'translateX(-50%)', background: 'rgba(99,102,241,0.9)', color: '#fff', fontSize: 8, fontWeight: 700, padding: '1px 3px', borderRadius: 3, whiteSpace: 'nowrap' }}>
-              {y === 50 ? '⊕' : `${Math.round(y)}%`}
-            </div>
-          </div>
+          <div key={`h${y}`} className="absolute inset-x-0 pointer-events-none" style={{ top: `${y}%`, height: 1, background: 'rgba(99,102,241,0.75)', zIndex: 200 }} />
         ))}
 
         {[...slide.elements].sort((a, b) => ((a as any).zIndex ?? 1) - ((b as any).zIndex ?? 1)).map((el) => {
