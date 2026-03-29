@@ -1358,7 +1358,7 @@ async function handleAnalyzeCarouselFromUrl(req, res) {
   const code = codeParam || extractShortcode(instagram_url, shortcode);
   if (!code) return res.status(400).json({ error: 'Не удалось извлечь shortcode из URL' });
 
-  console.log('analyze-carousel-from-url: code =', code, '| bg_slide =', background_slide_index);
+  console.log('analyze-carousel-from-url: code =', code, '| bg_slide =', background_slide_index, '| regen_first =', regen_first_bg);
 
   let slideUrls = [];
   try {
@@ -1370,61 +1370,100 @@ async function handleAnalyzeCarouselFromUrl(req, res) {
   if (slideUrls.length > 15) slideUrls = slideUrls.slice(0, 15);
 
   const VISION_MODELS = ['google/gemini-2.5-flash', 'google/gemini-2.0-flash-001', 'google/gemini-2.0-flash-lite-001'];
-  const bgIdx = Math.min(background_slide_index, slideUrls.length - 1);
+  const bgIdx = Math.min(Number(background_slide_index) || 0, slideUrls.length - 1);
 
-  // Скачиваем все слайды + выбранный фоновый слайд
-  const BATCH = 3;
-  const downloadedImages = new Array(slideUrls.length).fill(null);
+  // ── Шаг 1: скачиваем все слайды параллельно ──────────────────
+  console.log(`Downloading ${slideUrls.length} slides...`);
+  const downloadedImages = await Promise.all(
+    slideUrls.map(async (url, idx) => {
+      try { return await fetchImageAsBase64(url); }
+      catch (err) { console.error(`Download slide ${idx + 1} error:`, err.message); return null; }
+    })
+  );
 
-  for (let i = 0; i < slideUrls.length; i += BATCH) {
-    const batch = slideUrls.slice(i, i + BATCH).map((url, bi) => ({ url, idx: i + bi }));
-    await Promise.all(batch.map(async ({ url, idx }) => {
-      try {
-        downloadedImages[idx] = await fetchImageAsBase64(url);
-      } catch (err) {
-        console.error(`Download slide ${idx + 1} error:`, err.message);
-      }
-    }));
-  }
-
-  // Фоновый слайд — его фон будет применяться ко всем
-  const bgImage = downloadedImages[bgIdx];
-  let sharedBackground = null;
-
-  if (bgImage) {
-    // Генерируем фон из слайда-основы
-    const tempParsed = await analyzeOneSlide(bgImage.base64, bgImage.mimeType, CAROUSEL_ANALYSIS_PROMPT, VISION_MODELS);
-    if (tempParsed?.background) sharedBackground = tempParsed.background;
-  }
-
-  // Анализируем каждый слайд (элементы) и подставляем общий фон
-  const results = [];
-  for (let i = 0; i < slideUrls.length; i += BATCH) {
-    const batch = slideUrls.slice(i, i + BATCH).map((_, bi) => i + bi);
-    const batchResults = await Promise.all(batch.map(async (idx) => {
-      const img = downloadedImages[idx];
+  // ── Шаг 2: vision-анализ всех слайдов параллельно (без bg gen) ──
+  console.log(`Vision analysis for ${slideUrls.length} slides in parallel...`);
+  const visionResults = await Promise.all(
+    downloadedImages.map(async (img, idx) => {
       if (!img) return null;
       console.log(`Analyzing slide ${idx + 1}/${slideUrls.length}`);
       try {
-        // Генерация фона нужна только для: слайда 0 (если regen_first_bg) или если нет sharedBackground
-        const needBgGen = !sharedBackground || (idx === 0 && regen_first_bg);
-        const parsed = await analyzeOneSlide(img.base64, img.mimeType, CAROUSEL_ANALYSIS_PROMPT, VISION_MODELS, { skipBgGen: !needBgGen });
-        if (!parsed) return null;
-
-        // Применяем общий фон ко всем кроме слайда 0 с regen_first_bg
-        if (sharedBackground && !(idx === 0 && regen_first_bg)) {
-          parsed.background = sharedBackground;
-        }
-        return parsed;
+        return await analyzeOneSlide(img.base64, img.mimeType, CAROUSEL_ANALYSIS_PROMPT, VISION_MODELS, { skipBgGen: true });
       } catch (err) {
-        console.error(`Slide ${idx + 1} analysis error:`, err.message);
+        console.error(`Slide ${idx + 1} vision error:`, err.message);
         return null;
       }
-    }));
-    results.push(...batchResults);
-  }
+    })
+  );
 
-  const slides = results.filter(Boolean);
+  // ── Шаг 3: bg gen только для bgIdx + опционально slide 0 ─────
+  // Определяем какие слайды нуждаются в генерации фона
+  const needsBgGen = new Set([bgIdx]);
+  if (regen_first_bg && bgIdx !== 0) needsBgGen.add(0);
+
+  await Promise.all([...needsBgGen].map(async (idx) => {
+    const img = downloadedImages[idx];
+    const parsed = visionResults[idx];
+    if (!img || !parsed) return;
+    if (parsed.background?.type !== 'image') return; // CSS-фон — генерация не нужна
+    console.log(`Generating background for slide ${idx + 1}...`);
+    const bgBody = JSON.stringify({
+      model: 'google/gemini-2.5-flash-image',
+      modalities: ['image', 'text'],
+      stream: true,
+      messages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.base64}` } },
+        { type: 'text', text: 'я прикрепил тебе фото. удали на нем все текста, блоки с фото, точки, все, кроме фона.\n\nсохрани точь в точь фон и дай мне только его. сохрани цвет, текстуру, палитру точь в точь.\n\nесли фоном является фото - создай это же фото.\n\nсделай фото размером 3 на 4.' },
+      ]}],
+    });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const genRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://ririrai.vercel.app', 'X-Title': 'RiRi AI' },
+          body: bgBody,
+        });
+        const rawText = await genRes.text();
+        const base64Chunks = [];
+        let imageMime = 'image/png';
+        for (const line of rawText.split('\n')) {
+          if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+          try {
+            const chunk = JSON.parse(line.slice(6));
+            const delta = chunk?.choices?.[0]?.delta;
+            if (delta?.images?.length > 0) {
+              const u = delta.images[0]?.image_url?.url;
+              if (u?.startsWith('data:')) { const [m, b] = u.split(','); if (m) imageMime = m.replace('data:','').replace(';base64',''); if (b) base64Chunks.push(b); }
+            }
+            if (Array.isArray(delta?.content)) {
+              for (const part of delta.content) {
+                if (part?.type === 'image_url' && part?.image_url?.url?.startsWith('data:')) { const [m, b] = part.image_url.url.split(','); if (m) imageMime = m.replace('data:','').replace(';base64',''); if (b) base64Chunks.push(b); }
+              }
+            }
+          } catch {}
+        }
+        if (base64Chunks.length > 0) {
+          parsed.background = { type: 'image', src: `data:${imageMime};base64,${base64Chunks.join('')}` };
+          console.log(`Bg gen slide ${idx + 1} OK`);
+          break;
+        }
+      } catch (err) { console.error(`Bg gen slide ${idx + 1} attempt ${attempt} error:`, err.message); }
+    }
+  }));
+
+  // ── Шаг 4: применяем общий фон ко всем остальным слайдам ─────
+  const sharedBackground = visionResults[bgIdx]?.background ?? null;
+  console.log(`Shared bg type: ${sharedBackground?.type ?? 'none'}`);
+
+  const slides = visionResults.map((parsed, idx) => {
+    if (!parsed) return null;
+    // Слайды с собственным сгенерированным фоном оставляем как есть
+    if (needsBgGen.has(idx)) return parsed;
+    // Остальные получают sharedBackground
+    if (sharedBackground) parsed.background = sharedBackground;
+    return parsed;
+  }).filter(Boolean);
+
   console.log(`Done: ${slides.length}/${slideUrls.length} slides`);
   if (slides.length === 0) return res.status(502).json({ error: 'Не удалось проанализировать слайды' });
   return res.status(200).json({ slides, slide_count: slides.length, total: slideUrls.length });

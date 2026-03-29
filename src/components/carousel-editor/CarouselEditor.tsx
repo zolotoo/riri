@@ -760,7 +760,7 @@ function AiUrlScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: 
             </div>
             <p className="text-[16px] font-semibold text-[#1a1a18]">Воссоздаю карусель...</p>
             <p className="text-[13px] text-[#1a1a18]/45 text-center max-w-xs">
-              ИИ анализирует {slideCount} {slideCount === 1 ? 'слайд' : slideCount < 5 ? 'слайда' : 'слайдов'} параллельно. Обычно 20–40 сек.
+              RiRi трудится сразу над {slideCount} {slideCount === 1 ? 'слайдом' : slideCount < 5 ? 'слайдами' : 'слайдами'} параллельно — обычно это занимает 20–40 сек.
             </p>
           </div>
         )}
