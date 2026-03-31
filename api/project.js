@@ -9,8 +9,8 @@ import { Resend } from 'resend';
 
 async function sendInviteTelegramNotification(supabase, projectName, inviteeUserId, memberId) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  let appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
-  if (!botToken || !appUrl) return;
+  const appUrl = 'https://ririrai.vercel.app';
+  if (!botToken) return;
 
   const username = inviteeUserId.replace(/^tg-/, '');
   try {
@@ -47,7 +47,7 @@ async function sendInviteTelegramNotification(supabase, projectName, inviteeUser
     if (!chatId) return;
 
     const inviteLink = `${appUrl}/invite?m=${memberId}`;
-    const text = `👋 Тебя пригласили в проект «${projectName || 'Без названия'}»!\n\nНажми, чтобы открыть:\n${inviteLink}`;
+    const text = `👋 Тебя пригласили в проект «${projectName || 'Без названия'}»!\n\nОткрой приложение — проект уже появится у тебя слева в списке проектов.\n\nИли нажми напрямую:\n${inviteLink}`;
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -85,8 +85,8 @@ export default async function handler(req, res) {
 async function sendInviteEmailNotification(projectName, email, memberId) {
   const apiKey = process.env.RESEND_API_KEY;
   const emailFrom = process.env.EMAIL_FROM || 'noreply@resend.dev';
-  let appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
-  if (!apiKey || !appUrl) return;
+  const appUrl = 'https://ririrai.vercel.app';
+  if (!apiKey) return;
 
   const resend = new Resend(apiKey);
   const inviteLink = `${appUrl}/invite?m=${memberId}`;
