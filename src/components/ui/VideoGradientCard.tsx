@@ -222,21 +222,16 @@ export const VideoGradientCard = ({
           ) : (
             <>
               <div
-                className={cn(
-                  "absolute inset-0",
-                  !imgLoaded && !imgError && thumbnailUrl && "animate-pulse"
-                )}
+                className="absolute inset-0"
                 style={{
-                  background: (!imgLoaded && !imgError) || !thumbnailUrl
-                    ? "linear-gradient(160deg, #94a3b8 0%, #64748b 50%, #475569 100%)"
-                    : "#cbd5e1"
+                  background: "linear-gradient(160deg, #2d3748 0%, #1a202c 50%, #171923 100%)"
                 }}
               />
               <img
                 src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl)}
                 alt=""
                 className={cn(
-                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-500",
+                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-150",
                   imgLoaded ? "opacity-100" : "opacity-0"
                 )}
                 loading="eager"

@@ -631,13 +631,20 @@ export function Workspace(_props?: WorkspaceProps) {
   // Preload превью: JS Image() без задержек — браузер сразу ставит все в очередь загрузки
   useEffect(() => {
     if (!feedVideos.length) return;
-    feedVideos.forEach((video) => {
+    // Первые 16 грузим сразу (viewport), остальные с задержкой — не конкурируют за соединения
+    const VIEWPORT_COUNT = 16;
+    feedVideos.forEach((video, index) => {
       const url = video.preview_url;
       if (!url) return;
       const proxied = proxyImageUrl(url);
       if (!proxied || proxied.startsWith('data:')) return;
-      const img = new window.Image();
-      img.src = proxied;
+      const load = () => { const img = new window.Image(); img.src = proxied; };
+      if (index < VIEWPORT_COUNT) {
+        load();
+      } else {
+        const batchDelay = Math.floor((index - VIEWPORT_COUNT) / 8) * 200 + 300;
+        setTimeout(load, batchDelay);
+      }
     });
   }, [feedVideos]);
 
