@@ -630,24 +630,17 @@ export function Workspace(_props?: WorkspaceProps) {
     }
   }, [contentSection, feedVideos.length]);
 
-  // Preload превью: JS Image() — браузер грузит сразу все, к моменту скролла уже в кэше
+  // Preload превью: JS Image() без задержек — браузер сразу ставит все в очередь загрузки
   useEffect(() => {
     if (!feedVideos.length) return;
-    const handles: number[] = [];
-    feedVideos.forEach((video, i) => {
+    feedVideos.forEach((video) => {
       const url = video.preview_url;
       if (!url) return;
       const proxied = proxyImageUrl(url);
       if (!proxied || proxied.startsWith('data:')) return;
-      // Небольшая задержка для дальних карточек — не блокируем первые
-      const delay = i < 12 ? 0 : Math.floor(i / 4) * 30;
-      const h = window.setTimeout(() => {
-        const img = new window.Image();
-        img.src = proxied;
-      }, delay);
-      handles.push(h);
+      const img = new window.Image();
+      img.src = proxied;
     });
-    return () => handles.forEach(h => window.clearTimeout(h));
   }, [feedVideos]);
 
   // При смене папки или сортировки ремаунтим сетку — превью тогда стабильно подгружаются
