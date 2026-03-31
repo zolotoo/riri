@@ -9,7 +9,7 @@ import { Resend } from 'resend';
 
 async function sendInviteTelegramNotification(supabase, projectName, inviteeUserId, memberId) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  let appUrl = process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+  let appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
   if (!botToken || !appUrl) return;
 
   const username = inviteeUserId.replace(/^tg-/, '');
@@ -85,7 +85,7 @@ export default async function handler(req, res) {
 async function sendInviteEmailNotification(projectName, email, memberId) {
   const apiKey = process.env.RESEND_API_KEY;
   const emailFrom = process.env.EMAIL_FROM || 'noreply@resend.dev';
-  let appUrl = process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+  let appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null) || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
   if (!apiKey || !appUrl) return;
 
   const resend = new Resend(apiKey);
