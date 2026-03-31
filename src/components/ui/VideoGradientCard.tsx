@@ -212,10 +212,10 @@ export const VideoGradientCard = ({
               <div
                 className={cn(
                   "absolute inset-0",
-                  !imgLoaded && !imgError && "animate-pulse"
+                  !imgLoaded && !imgError && thumbnailUrl && "animate-pulse"
                 )}
                 style={{
-                  background: !imgLoaded && !imgError
+                  background: (!imgLoaded && !imgError) || !thumbnailUrl
                     ? "linear-gradient(160deg, #94a3b8 0%, #64748b 50%, #475569 100%)"
                     : "#cbd5e1"
                 }}
