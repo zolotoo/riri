@@ -619,14 +619,12 @@ export function Workspace(_props?: WorkspaceProps) {
     return getSortedVideos(videosForFeed);
   }, [videosForFeed, sortBy, sortFilterMinViral, sortFilterMinViews, profileStatsCache]);
 
-  // При росте списка (6→19→60 после нескольких fetch) ремаунтим сетку — иначе превью не грузятся у новых карточек
+  // Отслеживаем рост списка для prevReelsCountRef (ремаунт убран — preloader+кэш-чек делают это лишним)
   useEffect(() => {
     if (contentSection !== 'reels') return;
     const n = feedVideos.length;
     if (n > prevReelsCountRef.current) {
       prevReelsCountRef.current = n;
-      const t = setTimeout(() => setReelsGridKey(k => k + 1), 120);
-      return () => clearTimeout(t);
     }
   }, [contentSection, feedVideos.length]);
 

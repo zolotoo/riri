@@ -93,7 +93,14 @@ export const VideoGradientCard = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState<boolean>(() => {
+    if (!thumbnailUrl) return false;
+    const proxied = proxyImageUrl(thumbnailUrl);
+    if (!proxied || proxied.startsWith('data:')) return false;
+    const testImg = new window.Image();
+    testImg.src = proxied;
+    return testImg.complete && testImg.naturalWidth > 0;
+  });
   const [isRefreshingThumb, setIsRefreshingThumb] = useState(false);
   useEffect(() => {
     const m = () => setIsMobile(window.matchMedia('(max-width: 768px)').matches);
@@ -102,10 +109,15 @@ export const VideoGradientCard = ({
     return () => window.removeEventListener('resize', m);
   }, []);
 
-  // Сброс состояния при смене превью
+  // Сброс состояния при смене превью — проверяем кэш браузера
   useEffect(() => {
     setImgError(false);
-    setImgLoaded(false);
+    if (!thumbnailUrl) { setImgLoaded(false); return; }
+    const proxied = proxyImageUrl(thumbnailUrl);
+    if (!proxied || proxied.startsWith('data:')) { setImgLoaded(false); return; }
+    const testImg = new window.Image();
+    testImg.src = proxied;
+    setImgLoaded(testImg.complete && testImg.naturalWidth > 0);
   }, [thumbnailUrl]);
 
   // Если в БД сохранился битый wsrv.nl URL — сразу триггерим refresh (без тоста)
@@ -224,8 +236,8 @@ export const VideoGradientCard = ({
                 src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl)}
                 alt=""
                 className={cn(
-                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
-                  "opacity-100"
+                  "absolute inset-0 w-full h-full object-cover transition-opacity duration-500",
+                  imgLoaded ? "opacity-100" : "opacity-0"
                 )}
                 loading="eager"
                 decoding="async"
@@ -276,14 +288,11 @@ export const VideoGradientCard = ({
                 className={cn(
                   "px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 md:gap-1.5",
                   "border border-white/20",
-                  viralCoef > 10 ? "bg-accent-positive text-white" : 
+                  viralCoef > 10 ? "bg-accent-positive text-white" :
                   viralCoef > 5 ? "bg-amber-500 text-white" :
                   viralCoef > 0 ? "bg-white/90 text-slate-700" :
                   "bg-black/50 text-white/90"
                 )}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
               >
                 <Sparkles className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                 <span className="text-[10px] md:text-xs font-semibold whitespace-nowrap tabular-nums">{viralCoef > 0 ? Math.round(viralCoef) : '-'}</span>
@@ -303,9 +312,6 @@ export const VideoGradientCard = ({
                     viralMultiplier >= 1.5 ? "bg-accent-positive/60 text-white" :
                     "bg-slate-500/80 text-white"
                   )}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.2 }}
                   title={`В ${Math.round(viralMultiplier)}x раз ${viralMultiplier >= 1 ? 'больше' : 'меньше'} среднего у автора`}
                 >
                   <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
@@ -382,11 +388,8 @@ export const VideoGradientCard = ({
           {/* Bottom content */}
           <div>
             {/* Username / badge — для ручных видео показываем «Сценарий» */}
-            <motion.div
+            <div
               className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)] mb-2 inline-flex max-w-full"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 }}
             >
               <span className="text-[9px] md:text-[10px] font-semibold text-white/90 truncate max-w-[100px] md:max-w-[120px]">
                 {isManual ? '✏️ Сценарий' : `@${username || 'instagram'}`}
@@ -398,53 +401,33 @@ export const VideoGradientCard = ({
                   </svg>
                 </div>
               )}
-            </motion.div>
+            </div>
 
             {/* Stats line with icons - iOS 26 style liquid glass buttons (скрываем для ручных) */}
             <div className="flex items-center gap-1.5 md:gap-2 mb-2 flex-wrap">
               {!isManual && viewCount !== undefined && (
-                <motion.div
-                  className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
+                <div className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]">
                   <Eye className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(viewCount)}</span>
-                </motion.div>
+                </div>
               )}
               {!isManual && likeCount !== undefined && (
-                <motion.div
-                  className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.25 }}
-                >
+                <div className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]">
                   <Heart className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(likeCount)}</span>
-                </motion.div>
+                </div>
               )}
               {!isManual && commentCount !== undefined && (
-                <motion.div
-                  className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
+                <div className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]">
                   <MessageCircle className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap tabular-nums">{formatNumber(commentCount)}</span>
-                </motion.div>
+                </div>
               )}
               {!isManual && date && (
-                <motion.div
-                  className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.35 }}
-                >
+                <div className="px-2 py-1 md:px-2.5 md:py-1.5 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 border border-white/35 bg-black/36 md:bg-white/20 shadow-[0_4px_14px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.18)]">
                   <Calendar className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
                   <span className="text-[10px] md:text-[11px] font-semibold text-white/90 whitespace-nowrap">{formatShortDate(date)}</span>
-                </motion.div>
+                </div>
               )}
             </div>
 
