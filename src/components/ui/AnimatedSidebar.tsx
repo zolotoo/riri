@@ -218,7 +218,7 @@ export const SidebarLink = ({
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         style={{ display: open || !animate ? 'inline-block' : 'none' }}
         className={cn(
-          "text-sm font-medium whitespace-nowrap overflow-hidden font-heading tracking-[-0.01em]",
+          "text-sm font-semibold whitespace-nowrap overflow-hidden font-heading tracking-[-0.01em]",
           !disabled && "group-hover/sidebar:translate-x-0.5 transition-transform duration-150"
         )}
       >

@@ -1295,10 +1295,10 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
         </div>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 pt-4 pb-28 md:pb-6">
+      {/* Scrollable content — на мобильных скролит всё, на десктопе колонки скролят сами себя */}
+      <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden px-4 md:px-6 pt-4 pb-28 md:pb-6">
         {/* Main content — на мобильных колонка, на десктопе 3 колонки */}
-        <div className="flex flex-col md:flex-row md:flex-1 gap-4 md:min-h-0 md:overflow-hidden">
+        <div className="flex flex-col md:flex-row md:h-full gap-4 md:min-h-0 md:overflow-hidden">
           {/* Left: видео 9:16 + папка + статистика */}
           <div className="flex-shrink-0 flex flex-col gap-3 md:overflow-y-auto custom-scrollbar-light w-full md:w-auto md:min-w-[256px] md:max-w-[min(256px,28vw)]">
             {/* Видео 9:16 — для сценария без ссылки: тот же стиль фона, что в ленте */}
@@ -1986,7 +1986,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
           </div>
 
           {/* Right: Script — на мобильных с мин. высотой */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-[320px] md:min-h-0 rounded-card-xl shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] md:overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 min-h-[320px] md:min-h-0 rounded-card-xl shadow-glass bg-glass-white/80 backdrop-blur-glass-xl border border-white/[0.35] overflow-hidden">
             {/* Script header — 2 ряда как в каруселях */}
             <div className="flex flex-col gap-3 p-4 border-b border-slate-100">
               {/* Ряд 1: заголовок + подчерк · Промт + сохранён + По подчерку */}
