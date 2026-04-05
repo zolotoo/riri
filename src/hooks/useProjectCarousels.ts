@@ -25,7 +25,7 @@ export function useProjectCarousels(projectId: string | null, userId: string | n
       .select('*')
       .eq('project_id', projectId)
       .order('updated_at', { ascending: false })
-      .limit(3);
+      .limit(20);
     if (!error && data) setCarousels(data as ProjectCarousel[]);
     setLoading(false);
   }, [projectId]);
@@ -42,7 +42,7 @@ export function useProjectCarousels(projectId: string | null, userId: string | n
       if (data) setCarousels((prev) => prev.map((c) => c.id === id ? data as ProjectCarousel : c));
     } else {
       const { data } = await supabase.from('project_carousels').insert({ ...row, created_by: userId, created_at: now }).select().single();
-      if (data) setCarousels((prev) => [data as ProjectCarousel, ...prev].slice(0, 3));
+      if (data) setCarousels((prev) => [data as ProjectCarousel, ...prev].slice(0, 20));
     }
   }, [projectId, userId, carousels]);
 

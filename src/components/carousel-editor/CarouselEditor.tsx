@@ -39,7 +39,7 @@ function getDraftsLocal(): CarouselDraft[] {
 }
 function saveDraftLocal(draft: CarouselDraft): void {
   const all = getDraftsLocal().filter((d) => d.id !== draft.id);
-  localStorage.setItem('carousel_drafts', JSON.stringify([draft, ...all].slice(0, 3)));
+  localStorage.setItem('carousel_drafts', JSON.stringify([draft, ...all].slice(0, 20)));
 }
 function deleteDraftLocal(id: string): void {
   localStorage.setItem('carousel_drafts', JSON.stringify(getDraftsLocal().filter((d) => d.id !== id)));
