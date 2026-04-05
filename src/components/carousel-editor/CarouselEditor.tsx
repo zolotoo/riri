@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useProjectCarousels } from '../../hooks/useProjectCarousels';
 import type { ProjectCarousel } from '../../hooks/useProjectCarousels';
 import { toPng } from 'html-to-image';
@@ -33,17 +33,6 @@ function uid2(): string {
   return `draft_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-// localStorage — только fallback когда нет проекта
-function getDraftsLocal(): CarouselDraft[] {
-  try { return JSON.parse(localStorage.getItem('carousel_drafts') || '[]'); } catch { return []; }
-}
-function saveDraftLocal(draft: CarouselDraft): void {
-  const all = getDraftsLocal().filter((d) => d.id !== draft.id);
-  localStorage.setItem('carousel_drafts', JSON.stringify([draft, ...all].slice(0, 20)));
-}
-function deleteDraftLocal(id: string): void {
-  localStorage.setItem('carousel_drafts', JSON.stringify(getDraftsLocal().filter((d) => d.id !== id)));
-}
 
 function formatDraftDate(ts: string | number): string {
   const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
@@ -1005,12 +994,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, on
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(async () => {
       const name = `Автосохранение ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
-      if (onSaveDraft) {
-        await onSaveDraft(draftId, name, slides);
-      } else {
-        const draft: CarouselDraft = { id: draftId, project_id: '', name, slides, created_by: null, updated_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-        saveDraftLocal(draft);
-      }
+      if (onSaveDraft) await onSaveDraft(draftId, name, slides);
       setLastSaved(Date.now());
     }, 2000);
   }, [slides, draftId, onSaveDraft]);
@@ -1105,12 +1089,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, on
 
   const handleSaveDraft = useCallback(async () => {
     const name = `Черновик ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
-    if (onSaveDraft) {
-      await onSaveDraft(draftId, name, slides);
-    } else {
-      const draft: CarouselDraft = { id: draftId, project_id: '', name, slides, created_by: null, updated_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-      saveDraftLocal(draft);
-    }
+    if (onSaveDraft) await onSaveDraft(draftId, name, slides);
     setLastSaved(Date.now());
     toast.success('Черновик сохранён');
   }, [draftId, slides, onSaveDraft]);
@@ -2489,35 +2468,7 @@ export function CarouselEditor({ projectId, userId }: { projectId?: string | nul
   const [loadedDraft, setLoadedDraft] = useState<CarouselDraft | null>(null);
 
   // Supabase carousels (when in a project)
-  const { carousels: remoteCarousels, loading: remoteLoading, save: saveRemote, remove: removeRemote } = useProjectCarousels(projectId ?? null, userId ?? null);
-
-  // Local fallback (no project)
-  const [localDrafts, setLocalDrafts] = useState<CarouselDraft[]>(() => getDraftsLocal());
-
-  const drafts = useMemo(() => {
-    if (projectId) return remoteCarousels;
-    return localDrafts;
-  }, [projectId, remoteCarousels, localDrafts]);
-
-  const saveDraft = useCallback(async (id: string, name: string, slides: Slide[]) => {
-    const now = new Date().toISOString();
-    const draft: CarouselDraft = { id, project_id: projectId ?? '', name, slides, created_by: userId ?? null, updated_by: userId ?? null, created_at: now, updated_at: now };
-    if (projectId) {
-      await saveRemote(id, name, slides);
-    } else {
-      saveDraftLocal(draft);
-      setLocalDrafts(getDraftsLocal());
-    }
-  }, [projectId, userId, saveRemote]);
-
-  const deleteDraft = useCallback(async (id: string) => {
-    if (projectId) {
-      await removeRemote(id);
-    } else {
-      deleteDraftLocal(id);
-      setLocalDrafts(getDraftsLocal());
-    }
-  }, [projectId, removeRemote]);
+  const { carousels: drafts, loading: remoteLoading, save: saveDraft, remove: deleteDraft } = useProjectCarousels(projectId ?? null, userId ?? null);
 
   const handleAiDone = useCallback((slides: Slide[], img: { base64: string; mimeType: string }) => {
     setAiGeneratedSlides(slides);
