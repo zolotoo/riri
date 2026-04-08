@@ -44,6 +44,12 @@ export interface ZoneVideo {
   links?: { label: string; value: string }[];
   responsibles?: { label: string; value: string }[];
   is_manual?: boolean;
+  caption?: string;
+  caption_translation?: string;
+  post_description?: string;
+  responsible_assigned_at?: string;
+  responsible_timer_done?: boolean;
+  responsible_timer_done_at?: string;
 }
 
 // Дефолтные зоны

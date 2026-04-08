@@ -522,6 +522,12 @@ export function Workspace(_props?: WorkspaceProps) {
     links: (v as any).links,
     responsibles: (v as any).responsibles,
     is_manual: (v as any).is_manual,
+    caption: (v as any).caption,
+    caption_translation: (v as any).caption_translation,
+    post_description: (v as any).post_description,
+    responsible_assigned_at: (v as any).responsible_assigned_at,
+    responsible_timer_done: (v as any).responsible_timer_done,
+    responsible_timer_done_at: (v as any).responsible_timer_done_at,
     status: 'active',
   });
 
