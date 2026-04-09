@@ -531,7 +531,7 @@ async function handleTimerCompleted(req, res, supabase) {
     const cleanName = completedBy.replace(/^tg-/, '').replace(/^@/, '');
     const titleRaw = videoTitle || 'Без названия';
     const titleShort = titleRaw.length > 80 ? titleRaw.slice(0, 80) + '…' : titleRaw;
-    const text = `✅ <b>Видео обработано</b>\n\n📹 ${titleShort}\n📁 Проект: ${project.name || 'Без названия'}\n👤 Ответственный: @${cleanName}\n\nОтветственный отметил видео как готовое.`;
+    const text = `✅ <b>Видео обработано</b>\n\n📁 Проект: ${project.name || 'Без названия'}\n👤 Ответственный: @${cleanName}\n\nОписание сделанного видео: "${titleShort}"\n\nОтветственный отметил видео как готовое.`;
 
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
