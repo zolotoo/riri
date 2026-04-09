@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         .maybeSingle();
 
       if (respChat?.chat_id) {
-        const thankText = `🌟 <b>Тебя благодарит ${fromUsername ? `@${fromUsername}` : fromName}!</b>\n\nОтличная работа! Видео сделано — команда это ценит 🙏`;
+        const thankText = `🌟 <b>Тебя благодарит ${fromUsername ? `@${fromUsername}` : fromName}!</b>\n\nОтличная работа! Так держать 🙏`;
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
