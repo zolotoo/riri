@@ -154,6 +154,8 @@ export default async function handler(req, res) {
       return handleFetchCarouselSlides(req, res);
     case 'analyze-carousel-from-url':
       return handleAnalyzeCarouselFromUrl(req, res);
+    case 'translate-carousel-texts':
+      return handleTranslateCarouselTexts(req, res);
     case 'regen-background':
       return handleRegenBackground(req, res);
     case 'refine-carousel':
@@ -1533,6 +1535,34 @@ async function handleAnalyzeCarouselFromUrl(req, res) {
   console.log(`Done: ${slides.length}/${slideUrls.length} slides`);
   if (slides.length === 0) return res.status(502).json({ error: 'Не удалось проанализировать слайды' });
   return res.status(200).json({ slides, slide_count: slides.length, total: slideUrls.length });
+}
+
+// ─── translate-carousel-texts ────────────────────────────────────────────────
+
+async function handleTranslateCarouselTexts(req, res) {
+  const { texts } = req.body ?? {};
+  if (!Array.isArray(texts) || texts.length === 0) return res.status(400).json({ error: 'texts[] required' });
+
+  try {
+    const { text: raw } = await callOpenRouter({
+      apiKey: OPENROUTER_API_KEY,
+      model: 'google/gemini-2.5-flash',
+      messages: [{
+        role: 'user',
+        content: `Переведи каждую строку на русский язык. Верни ТОЛЬКО JSON-массив строк в том же порядке, без пояснений.\n\n${JSON.stringify(texts)}`,
+      }],
+      temperature: 0.1,
+      max_tokens: 2000,
+    });
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    const translated = arrayMatch ? JSON.parse(arrayMatch[0]) : null;
+    if (!Array.isArray(translated) || translated.length !== texts.length) {
+      return res.status(502).json({ error: 'Не удалось разобрать перевод' });
+    }
+    return res.status(200).json({ translated });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
 }
 
 // ─── regen-background ─────────────────────────────────────────────────────────

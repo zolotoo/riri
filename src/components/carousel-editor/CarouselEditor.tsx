@@ -661,7 +661,7 @@ function AiUrlScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: 
   const [slideUrls, setSlideUrls] = useState<string[]>([]);
   const [bgSlideIdx, setBgSlideIdx] = useState(0);
   const [regenFirstBg, setRegenFirstBg] = useState(false);
-  const [translateContent, setTranslateContent] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -703,7 +703,7 @@ function AiUrlScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: 
           code,
           background_slide_index: bgSlideIdx,
           regen_first_bg: regenFirstBg,
-          translate: translateContent,
+
         }),
       });
       const data = await res.json();
@@ -845,21 +845,6 @@ function AiUrlScreen({ onBack, onDone }: { onBack: () => void; onDone: (slides: 
               </GlassCard>
             )}
 
-            <GlassCard className="p-4">
-              <button className="w-full flex items-center gap-3 text-left" onClick={() => setTranslateContent(!translateContent)}>
-                <div
-                  className={cn('w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center border-2 transition-all', translateContent ? 'border-[#833ab4]' : 'border-[#1a1a18]/15')}
-                  style={translateContent ? { background: IG_GRADIENT } : {}}
-                >
-                  {translateContent && <span className="text-white text-[10px] font-bold">✓</span>}
-                </div>
-                <div>
-                  <p className="text-[13px] font-semibold text-[#1a1a18]">Перевести текст на русский</p>
-                  <p className="text-[11px] text-[#1a1a18]/45 mt-0.5">RiRi переведёт все тексты при воссоздании</p>
-                </div>
-              </button>
-            </GlassCard>
-
             {error && <p className="text-[13px] text-red-500 text-center">{error}</p>}
 
             <button
@@ -958,6 +943,7 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, on
   const [exporting, setExporting] = useState(false);
   const [activePanel, setActivePanel] = useState<'add' | 'bg' | 'text' | 'image' | 'shape' | 'shape-picker' | null>(null);
   const [regenBgLoading, setRegenBgLoading] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [draftId] = useState<string>(initialDraftId ?? uid2());
   const [lastSaved, setLastSaved] = useState<number | null>(null);
 
@@ -1104,6 +1090,36 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, on
     else if (el?.type === 'shape') setActivePanel('shape');
     else setActivePanel(null);
   }, [slide.elements]);
+
+  const handleTranslate = useCallback(async () => {
+    const allTexts: string[] = [];
+    slides.forEach((s) => s.elements.forEach((el) => { if (el.type === 'text' && el.text) allTexts.push(el.text); }));
+    if (allTexts.length === 0) { toast.error('Нет текстов для перевода'); return; }
+    setTranslating(true);
+    try {
+      const res = await fetch('/api/scriptwriter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'translate-carousel-texts', texts: allTexts }),
+      });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.translated)) throw new Error(data.error || 'Ошибка перевода');
+      let idx = 0;
+      setSlides((prev) => prev.map((s) => ({
+        ...s,
+        elements: s.elements.map((el) => {
+          if (el.type !== 'text' || !el.text) return el;
+          const translated = data.translated[idx++];
+          return translated ? { ...el, text: translated, originalText: el.text } as typeof el : el;
+        }),
+      })));
+      toast.success('Переведено');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Ошибка перевода');
+    } finally {
+      setTranslating(false);
+    }
+  }, [slides]);
 
   const handleSaveDraft = useCallback(async () => {
     const name = `Черновик ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`;
@@ -1275,6 +1291,16 @@ function FreeEditor({ onBack, initialSlides, initialDraftId, aiOriginalImage, on
             style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid rgba(0,0,0,0.07)' }}
           >
             <span style={{ fontSize: 16, lineHeight: 1 }}>↩</span>
+          </button>
+          <button
+            onClick={handleTranslate}
+            disabled={translating}
+            className="flex items-center gap-1 rounded-xl px-2.5 py-2 text-[12px] font-medium transition-all active:scale-95 touch-manipulation"
+            style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid rgba(0,0,0,0.07)' }}
+            title="Перевести все тексты на русский"
+          >
+            {translating ? <Loader2 size={12} className="animate-spin" /> : <span style={{ fontSize: 13 }}>🌐</span>}
+            <span className="hidden sm:inline">Перевести</span>
           </button>
           <button
             onClick={handleSaveDraft}
