@@ -1050,11 +1050,13 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
   const activeVideo = incomingVideos[activeIndex];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/40 backdrop-blur-sm">
-      {/* Subtle blobs on inner content area */}
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-glass-2xl p-0 md:p-6">
+      {/* Backdrop click to close */}
+      <div className="absolute inset-0" onClick={handleClose} aria-hidden />
 
-      {/* Content */}
-      <div className="relative w-full h-full flex flex-col">
+      {/* Panel card — стиль как у окна работы с видео */}
+      <div className="relative w-full md:max-w-2xl h-[92dvh] md:h-[90vh] md:max-h-[900px] bg-base-alt rounded-t-[24px] md:rounded-card-2xl shadow-float-lg border-0 md:border md:border-white/[0.35] overflow-hidden flex flex-col">
+
         
         {/* Header with Tabs and Search */}
         <div className="flex-shrink-0 p-6 pb-4">

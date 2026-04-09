@@ -29,7 +29,7 @@ import type { Project } from './hooks/useProjects';
 import { 
   Settings, Search, LayoutGrid, User, LogOut,
   Radar, Plus, X, Palette, Sparkles, Trash2, Users, Menu, BarChart2, Activity,
-  Image as ImageIcon, MessageCircleHeart, Link
+  Image as ImageIcon, MessageCircleHeart
 } from 'lucide-react';
 import { GlassFolderIcon } from './components/ui/GlassFolderIcons';
 import { MobileBottomBar, type MobileTabId } from './components/ui/MobileBottomBar';
@@ -643,11 +643,6 @@ function AppContent() {
                   onClick={() => setViewMode('workspace')}
                   isActive={viewMode === 'workspace'}
                   badge={videos.length}
-                />
-                <SidebarLink
-                  icon={<Link className="w-4 h-4" strokeWidth={2.5} />}
-                  label="По ссылке"
-                  onClick={() => { setSearchTab('link'); setIsSearchOpen(true); }}
                 />
                 <SidebarLink
                   icon={<Radar className="w-4 h-4" strokeWidth={2.5} />}
