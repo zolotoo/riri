@@ -199,8 +199,7 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
   const radarUserId = user?.id || 'anonymous';
   
   const { 
-    profiles: radarProfiles, 
-    recentReels: radarReels, 
+    profiles: radarProfiles,
     loading: radarLoading,
     loadingUsername: radarLoadingUsername,
     stats: radarStats,
