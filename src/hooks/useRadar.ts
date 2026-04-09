@@ -37,6 +37,13 @@ export interface RadarReel extends InstagramSearchResult {
 const STORAGE_KEY = 'radar_profiles';
 const STORAGE_MIGRATED_KEY = 'radar_profiles_migrated';
 
+/** Извлекает чистый username из строки (может быть ссылкой на профиль Instagram) */
+function extractInstagramUsername(input: string): string {
+  const urlMatch = input.match(/instagram\.com\/([^\/\?@#\s]+)/);
+  if (urlMatch) return urlMatch[1].toLowerCase();
+  return input.replace(/^@/, '').toLowerCase();
+}
+
 /** Преобразует строку из БД в TrackedProfile */
 function dbRowToProfile(row: {
   id: string;
@@ -52,7 +59,7 @@ function dbRowToProfile(row: {
 }): TrackedProfile {
   return {
     id: row.id,
-    username: row.instagram_username,
+    username: extractInstagramUsername(row.instagram_username),
     projectId: row.project_id,
     addedAt: row.added_at,
     lastChecked: row.last_checked_at ?? undefined,

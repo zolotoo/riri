@@ -179,6 +179,8 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
   const [radarAddFrequencyDays, setRadarAddFrequencyDays] = useState(7); // 1, 3, 7, 14 дней
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedRadarProfile, setSelectedRadarProfile] = useState<string | null>(null); // Фильтр по профилю в радаре
+  const [profileVideosCache, setProfileVideosCache] = useState<Record<string, InstagramSearchResult[]>>({});
+  const [profileVideosLoading, setProfileVideosLoading] = useState(false);
   const [_spinOffset, setSpinOffset] = useState(0);
   const [_showProjectSelect, _setShowProjectSelect] = useState(false);
   const [_selectedProjectForAdd, _setSelectedProjectForAdd] = useState<string | null>(currentProjectId || null);
@@ -237,7 +239,57 @@ export function SearchPanel({ isOpen, onClose, initialTab = DEFAULT_TAB, current
       } as InstagramSearchResult;
     });
   }, [inboxVideos, currentProjectId]);
-  
+
+  // Загружаем все видео профиля из Supabase при выборе профиля
+  useEffect(() => {
+    if (!selectedRadarProfile || !currentProjectId) return;
+
+    const username = selectedRadarProfile.toLowerCase();
+
+    // Сбрасываем кэш при смене профиля чтобы всегда показывались свежие данные
+    setProfileVideosLoading(true);
+
+    const load = async () => {
+      try {
+        let query = supabase
+          .from('saved_videos')
+          .select('*')
+          .eq('project_id', currentProjectId)
+          .ilike('owner_username', username)
+          .order('taken_at', { ascending: false, nullsFirst: false });
+
+        if (!currentProject?.isShared) {
+          query = query.eq('user_id', radarUserId);
+        }
+
+        const { data } = await query;
+        if (!data) return;
+
+        const videos: InstagramSearchResult[] = data.map((v: any) => ({
+          id: v.id,
+          shortcode: v.shortcode,
+          url: v.video_url || (v.shortcode ? `https://instagram.com/reel/${v.shortcode}` : ''),
+          thumbnail_url: v.thumbnail_url,
+          display_url: v.thumbnail_url,
+          caption: v.caption,
+          view_count: v.view_count,
+          like_count: v.like_count,
+          comment_count: v.comment_count,
+          taken_at: v.taken_at,
+          owner: { username: v.owner_username },
+          projectId: currentProjectId,
+          savedToInbox: true,
+        }));
+
+        setProfileVideosCache(prev => ({ ...prev, [username]: videos }));
+      } finally {
+        setProfileVideosLoading(false);
+      }
+    };
+
+    load();
+  }, [selectedRadarProfile, currentProjectId, radarUserId, currentProject?.isShared]);
+
   // Минимум просмотров для показа в поиске
   const MIN_VIEWS = 30000;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -999,15 +1051,8 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
   const activeVideo = incomingVideos[activeIndex];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-base">
-      {/* Subtle dusty gray blobs */}
-      <div className="absolute top-[-10%] right-[10%] w-[45%] h-[45%] bg-gradient-to-bl from-slate-200/30 via-slate-100/15 to-transparent rounded-full blur-[80px] pointer-events-none" />
-      <div className="absolute bottom-[5%] left-[-5%] w-[50%] h-[50%] bg-gradient-to-tr from-neutral-900/15 via-neutral-800/8 to-transparent rounded-full blur-[100px] pointer-events-none" />
-      
-      {/* Noise texture */}
-      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`
-      }} />
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/40 backdrop-blur-sm">
+      {/* Subtle blobs on inner content area */}
 
       {/* Content */}
       <div className="relative w-full h-full flex flex-col">
@@ -1046,10 +1091,10 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
               </div>
             </div>
 
-            {/* Glass Tab Buttons */}
-            <div className="flex justify-center mb-4">
-              <GlassTabGroup>
-                {!HIDE_SEARCH_BY_WORD && (
+            {/* Glass Tab Buttons — показываем только если не поисковые вкладки */}
+            {!HIDE_SEARCH_BY_WORD && (
+              <div className="flex justify-center mb-4">
+                <GlassTabGroup>
                   <GlassTabButton
                     isActive={activeTab === 'search'}
                     onClick={() => setActiveTab('search')}
@@ -1057,23 +1102,23 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
                   >
                     Поиск
                   </GlassTabButton>
-                )}
-                <GlassTabButton
-                  isActive={activeTab === 'link'}
-                  onClick={() => setActiveTab('link')}
-                  icon={<Link className="w-4 h-4" />}
-                >
-                  По ссылке
-                </GlassTabButton>
-                <GlassTabButton
-                  isActive={activeTab === 'radar'}
-                  onClick={() => setActiveTab('radar')}
-                  icon={<Radar className="w-4 h-4" />}
-                >
-                  Радар
-                </GlassTabButton>
-              </GlassTabGroup>
-            </div>
+                  <GlassTabButton
+                    isActive={activeTab === 'link'}
+                    onClick={() => setActiveTab('link')}
+                    icon={<Link className="w-4 h-4" />}
+                  >
+                    По ссылке
+                  </GlassTabButton>
+                  <GlassTabButton
+                    isActive={activeTab === 'radar'}
+                    onClick={() => setActiveTab('radar')}
+                    icon={<Radar className="w-4 h-4" />}
+                  >
+                    Радар
+                  </GlassTabButton>
+                </GlassTabGroup>
+              </div>
+            )}
 
             {/* Search Tab Content */}
             {!HIDE_SEARCH_BY_WORD && activeTab === 'search' && (
@@ -1414,7 +1459,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
                     <div className="flex flex-wrap gap-2">
                       {radarProfiles.map(profile => {
                         const isSelected = selectedRadarProfile === profile.username;
-                        const profileReelsCount = radarReels.filter(r => r.owner?.username === profile.username).length;
+                        const profileReelsCount = getProfileVideosFromInbox(profile.username).length;
                         
                         return (
                           <div 
@@ -1538,7 +1583,7 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
                     <div>
                       <h2 className="text-lg font-bold text-slate-800">@{selectedRadarProfile}</h2>
                       <p className="text-sm text-slate-500">
-                        {getProfileVideosFromInbox(selectedRadarProfile).length} видео
+                        {(profileVideosCache[selectedRadarProfile.toLowerCase()] ?? getProfileVideosFromInbox(selectedRadarProfile)).length} видео
                       </p>
                     </div>
                   </div>
@@ -1569,13 +1614,19 @@ const match = linkPreview.url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
                 </div>
 
                 {/* Video Grid */}
-                {(() => {
+                {profileVideosLoading ? (
+                  <div className="text-center py-16">
+                    <Loader2 className="w-10 h-10 text-slate-300 mx-auto mb-4 animate-spin" />
+                    <p className="text-slate-400 text-sm">Загружаем видео...</p>
+                  </div>
+                ) : (() => {
                   // Получаем статистику профиля для расчёта viralMultiplier
                   const profileStats = getProfileStats(selectedRadarProfile);
-                  
-                  // Получаем все видео профиля из inboxVideos (без запросов к API)
-                  const allProfileReels = getProfileVideosFromInbox(selectedRadarProfile);
-                  
+
+                  // Берём видео из кэша (Supabase запрос) или фолбэк на inboxVideos
+                  const cached = profileVideosCache[selectedRadarProfile.toLowerCase()];
+                  const allProfileReels = cached ?? getProfileVideosFromInbox(selectedRadarProfile);
+
                   const profileReels = allProfileReels
                     .sort((a: InstagramSearchResult, b: InstagramSearchResult) => {
                       switch (sortBy) {
