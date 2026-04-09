@@ -454,16 +454,17 @@ function AppContent() {
     (async () => {
       try {
         await setUserContext(userId);
-        const { data: member, error } = await supabase
+        const { data: rawMember, error } = await supabase
           .from('project_members')
           .select('id, project_id, user_id, status')
           .eq('id', memberId)
           .single();
 
-        if (error || !member) {
+        if (error || !rawMember) {
           toast.error('Приглашение не найдено или истекло');
           return;
         }
+        let member = rawMember;
         const isEmailInvite = member.user_id.startsWith('email-');
         const emailFromInvite = isEmailInvite ? member.user_id.replace('email-', '') : null;
         const userEmail = user.email?.toLowerCase();
@@ -472,6 +473,24 @@ function AppContent() {
           toast.error('Это приглашение предназначено другому пользователю');
           return;
         }
+
+        // For email-based invites, bind membership to the resolved app user_id
+        // so shared-project queries by user_id can find the project afterwards.
+        if (isEmailInvite && member.user_id !== userId) {
+          const { error: rebindErr } = await supabase
+            .from('project_members')
+            .update({
+              user_id: userId,
+              status: 'active',
+              joined_at: new Date().toISOString(),
+            })
+            .eq('id', memberId)
+            .eq('user_id', member.user_id);
+
+          if (rebindErr) throw rebindErr;
+          member = { ...member, user_id: userId, status: 'active' };
+        }
+
         if (member.status === 'active') {
           selectProject(member.project_id);
           refetchProjects();
@@ -500,7 +519,7 @@ function AppContent() {
         toast.error('Не удалось принять приглашение');
       }
     })();
-  }, [user?.telegram_username, selectProject, refetchProjects]);
+  }, [user?.id, user?.email, selectProject, refetchProjects]);
 
   // Обработка уведомлений о pending приглашениях
   useEffect(() => {
