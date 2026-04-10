@@ -11,11 +11,15 @@ const MEM0_BASE = 'https://api.mem0.ai/v1';
 async function mem0Search(userId, query) {
   if (!MEM0_API_KEY) return [];
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${MEM0_BASE}/memories/search/`, {
       method: 'POST',
       headers: { Authorization: `Token ${MEM0_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, user_id: String(userId), limit: 5 }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.results || data || []).map(m => m.memory || m.text || '').filter(Boolean);
