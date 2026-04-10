@@ -32,7 +32,8 @@ export type TokenAction =
   | 'analytics_sync_24'
   | 'analytics_sync_36'
   | 'analytics_sync_48'
-  | 'analytics_sync_60';
+  | 'analytics_sync_60'
+  | 'ai_hook';
 
 /** Базовые стоимости в коинах */
 const TOKEN_COSTS: Record<Exclude<TokenAction, 'radar_refresh_all'>, number> = {
@@ -62,6 +63,7 @@ const TOKEN_COSTS: Record<Exclude<TokenAction, 'radar_refresh_all'>, number> = {
   analytics_sync_36: 15,  // 3 RapidAPI страницы (36 роликов)
   analytics_sync_48: 20,  // 4 RapidAPI страницы (48 роликов)
   analytics_sync_60: 25,  // 5 RapidAPI страниц  (60 роликов)
+  ai_hook: 5,             // Jina embed + Claude Sonnet 3.5 — топ-10 хуков
 };
 
 /** Коинов за один профиль при «Обновить все» в радаре */

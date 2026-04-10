@@ -205,6 +205,8 @@ export default async function handler(req, res) {
       return handleRegenBackground(req, res);
     case 'refine-carousel':
       return handleRefineCarousel(req, res);
+    case 'generate-ai-hook':
+      return handleGenerateAiHook(req, res);
     default:
       return res.status(400).json({ error: 'Unknown action' });
   }
@@ -1785,4 +1787,79 @@ async function handleRefineCarousel(req, res) {
   if (!parsed) return res.status(502).json({ error: lastErr?.message ?? 'Vision API error' });
 
   return res.status(200).json(parsed);
+}
+
+// ── ИИ-хук: семантический поиск + адаптация топ-10 хуков ─────────────────────
+
+async function handleGenerateAiHook(req, res) {
+  const { script, reference_transcript, min_views = 50000 } = req.body;
+  if (!OPENROUTER_API_KEY) return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+
+  // Запрос = свой сценарий (приоритет) или транскрипция конкурента
+  const queryText = script?.trim() || reference_transcript?.trim();
+  if (!queryText) return res.status(400).json({ error: 'Нет текста для поиска' });
+
+  // 1. Embed запрос через Jina
+  const embedding = await jinaEmbed(queryText);
+  if (!embedding) return res.status(502).json({ error: 'Embedding failed' });
+
+  // 2. Топ-20 ближайших хуков из базы
+  const viralHooks = await matchViralHooks(embedding, { minViews: min_views, limit: 20 });
+  if (!viralHooks?.length) {
+    return res.status(200).json({ success: true, hooks: [], message: 'Похожих хуков не найдено' });
+  }
+
+  // 3. Claude: выбрать топ-10, адаптировать, объяснить
+  const hooksListText = viralHooks.map((h, i) => {
+    const views = h.view_count >= 1_000_000
+      ? `${(h.view_count / 1_000_000).toFixed(1)}М`
+      : `${Math.round(h.view_count / 1000)}К`;
+    return `${i + 1}. [${views} просмотров | ниша: ${h.niche} | @${h.owner_username || '?'}]\nОРИГИНАЛ: ${h.content}\nURL: ${h.url || '—'}`;
+  }).join('\n\n');
+
+  const userText = `Ты эксперт по вирусному контенту. У тебя есть сценарий пользователя и 20 реальных хуков из вирусных видео (100k+ просмотров), подобранных семантически.
+
+СЦЕНАРИЙ ПОЛЬЗОВАТЕЛЯ:
+---
+${queryText.slice(0, 2000)}
+---
+
+НАЙДЕННЫЕ ВИРУСНЫЕ ХУКИ (топ-20 по семантической близости):
+${hooksListText}
+
+Твоя задача:
+1. Выбери 10 ЛУЧШИХ хуков из списка — те, что наиболее релевантны теме и стилю сценария пользователя
+2. Для каждого — адаптируй хук под конкретный сценарий (минимальные изменения, сохрани структуру и технику)
+3. Объясни коротко (1-2 предложения) ПОЧЕМУ этот хук цепляет — какую психологическую технику использует
+
+Верни строго JSON:
+{
+  "hooks": [
+    {
+      "original": "оригинальный хук как есть",
+      "adapted": "адаптированная версия под сценарий пользователя",
+      "explanation": "почему этот хук работает",
+      "views": "строка вида 1.2М или 340К",
+      "niche": "ниша",
+      "url": "ссылка или null",
+      "owner_username": "ник или null"
+    }
+  ]
+}`;
+
+  try {
+    const { text: rawText } = await callOpenRouter({
+      apiKey: OPENROUTER_API_KEY,
+      model: MODELS.CLAUDE_SONNET_35,
+      messages: [{ role: 'user', content: userText }],
+      temperature: 0.5,
+      response_format: { type: 'json_object' },
+    });
+    if (!rawText) return res.status(502).json({ error: 'Empty response' });
+    const parsed = parseJsonResponse(rawText);
+    return res.status(200).json({ success: true, hooks: parsed.hooks || [] });
+  } catch (err) {
+    console.error('generate-ai-hook error:', err);
+    return res.status(502).json({ error: 'OpenRouter API error', details: err.message });
+  }
 }
