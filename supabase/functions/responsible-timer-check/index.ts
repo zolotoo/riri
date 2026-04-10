@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
 
   const { data: overdueVideos, error } = await supabase
     .from('saved_videos')
-    .select('id, caption, owner_username, project_id, responsibles, responsible_assigned_at, responsible_notified_at')
+    .select('id, caption, owner_username, project_id, folder_id, responsibles, responsible_assigned_at, responsible_notified_at')
     .eq('responsible_timer_done', false)
     .not('responsible_assigned_at', 'is', null)
     .lt('responsible_assigned_at', cutoff)
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
   const projectIds = [...new Set(overdueVideos.map(v => v.project_id).filter(Boolean))];
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, project_manager_id, owner_id, user_id')
+    .select('id, name, project_manager_id, owner_id, user_id, folders')
     .in('id', projectIds);
 
   const projectMap = new Map((projects ?? []).map(p => [p.id, p]));
@@ -91,12 +91,17 @@ Deno.serve(async (req) => {
 
     const responsibleNames = activeResponsibles.map(r => r.value).join(', ');
 
+    const folders: { id: string; name: string }[] = Array.isArray(project.folders) ? project.folders : [];
+    const folder = video.folder_id ? folders.find(f => f.id === video.folder_id) : null;
+    const folderLine = folder ? `📂 Папка: ${folder.name}\n` : '';
+
     // Уведомление проджект-менеджеру (или создателю проекта)
     const pmChatId = await getChatId(supabase, notifyUserId);
     if (pmChatId) {
       const pmText = `⏰ <b>Просрочка по видео</b>\n\n` +
         `📹 ${videoTitle}\n` +
         `📁 Проект: ${project.name || 'Без названия'}\n` +
+        folderLine +
         `👤 Ответственный: ${responsibleNames}\n\n` +
         `Видео не обработано более 24 часов.`;
       await sendTelegramMessage(pmChatId, pmText);
@@ -109,8 +114,9 @@ Deno.serve(async (req) => {
       if (respChatId) {
         const respText = `⏰ <b>Напоминание</b>\n\n` +
           `📹 ${videoTitle}\n` +
-          `📁 Проект: ${project.name || 'Без названия'}\n\n` +
-          `Видео назначено на тебя более 24 часов назад и ещё не обработано.\n` +
+          `📁 Проект: ${project.name || 'Без названия'}\n` +
+          folderLine +
+          `\nВидео назначено на тебя более 24 часов назад и ещё не обработано.\n` +
           `Перемести его в нужную папку или отметь как готовое в приложении.`;
         await sendTelegramMessage(respChatId, respText);
       }
