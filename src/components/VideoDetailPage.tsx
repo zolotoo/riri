@@ -270,6 +270,8 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const [copiedAiHookIdx, setCopiedAiHookIdx] = useState<number | null>(null);
   const [aiHookSortBy, setAiHookSortBy] = useState<'relevance' | 'views'>('relevance');
   const [aiHookLangFilter, setAiHookLangFilter] = useState<'all' | 'ru' | 'en'>('all');
+  const aiHooksBtnRef = useRef<HTMLButtonElement>(null);
+  const [aiHooksPanelAnchor, setAiHooksPanelAnchor] = useState<{ top: number; left: number } | null>(null);
 
   const projectStyles = currentProject?.projectStyles || [];
   const currentPromptStyle = editingStyle || (projectStyles.length === 1 ? projectStyles[0] : null);
@@ -2143,14 +2145,24 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   )}
                 </div>
                 <button
+                  ref={aiHooksBtnRef}
                   onClick={() => {
+                    const btn = aiHooksBtnRef.current;
+                    if (btn) {
+                      const rect = btn.getBoundingClientRect();
+                      const panelWidth = Math.min(400, window.innerWidth - 16);
+                      setAiHooksPanelAnchor({
+                        top: rect.bottom + 6,
+                        left: Math.max(8, rect.right - panelWidth),
+                      });
+                    }
                     if (!isGeneratingAiHook && aiHookResults.length > 0) {
                       setShowAiHooksPanel(v => !v);
-                    } else {
+                    } else if (!isGeneratingAiHook) {
                       handleGenerateAiHook();
                     }
                   }}
-                  disabled={isGeneratingAiHook || isGeneratingScript || (!transcript?.trim() && !script?.trim())}
+                  disabled={isGeneratingScript || (!transcript?.trim() && !script?.trim())}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                     (transcript?.trim() || script?.trim())
@@ -2314,126 +2326,6 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
               </div>
             </div>
 
-            {/* ИИ-хуки — inline expandable панель */}
-            {showAiHooksPanel && (
-              <div className="border-b border-slate-100 overflow-hidden">
-                {isGeneratingAiHook ? (
-                  <div className="flex items-center gap-3 px-4 py-5">
-                    <div className="relative flex-shrink-0 w-9 h-9">
-                      <div className="w-9 h-9 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" />
-                      <Zap className="w-4 h-4 text-slate-500 absolute inset-0 m-auto" />
-                    </div>
-                    <div>
-                      <p className="text-slate-700 text-sm font-medium">Анализируем вирусные хуки...</p>
-                      <p className="text-slate-400 text-xs mt-0.5">Семантический поиск + адаптация под ваш сценарий</p>
-                    </div>
-                  </div>
-                ) : sortedFilteredHooks.length > 0 ? (
-                  <>
-                    {/* Контролы: счётчик + сортировка + фильтр языка */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100 flex-wrap gap-2">
-                      <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" />
-                        {aiHookResults.length} хуков
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        {/* Фильтр языка */}
-                        <div className="flex items-center gap-0.5 bg-slate-200/70 rounded-md p-0.5">
-                          {(['all', 'ru', 'en'] as const).map(lang => (
-                            <button
-                              key={lang}
-                              onClick={() => setAiHookLangFilter(lang)}
-                              className={cn(
-                                'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
-                                aiHookLangFilter === lang ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'
-                              )}
-                            >
-                              {lang === 'all' ? 'Все' : lang.toUpperCase()}
-                            </button>
-                          ))}
-                        </div>
-                        {/* Сортировка */}
-                        <button
-                          onClick={() => setAiHookSortBy(v => v === 'relevance' ? 'views' : 'relevance')}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-slate-500 hover:bg-slate-200 transition-colors"
-                          title={aiHookSortBy === 'relevance' ? 'Сейчас: по релевантности' : 'Сейчас: по просмотрам'}
-                        >
-                          <ArrowDownUp className="w-3 h-3" />
-                          {aiHookSortBy === 'relevance' ? 'По релевантности' : 'По просмотрам'}
-                        </button>
-                      </div>
-                    </div>
-                    {/* Список хуков */}
-                    <div className="divide-y divide-slate-100 max-h-[460px] overflow-y-auto">
-                      {sortedFilteredHooks.map((hook, idx) => {
-                        const lang = detectHookLang(hook.original);
-                        return (
-                          <div key={idx} className="p-4 hover:bg-slate-50/60 transition-colors">
-                            <div className="flex items-start gap-3">
-                              {/* Номер */}
-                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-semibold text-slate-400 mt-0.5">
-                                {idx + 1}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                {/* Бейджи */}
-                                <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                                    <Eye className="w-2.5 h-2.5" />{hook.views}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{hook.niche}</span>
-                                  <span className={cn(
-                                    'text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold tracking-wide',
-                                    lang === 'ru' ? 'bg-blue-50 text-blue-500' : 'bg-amber-50 text-amber-600'
-                                  )}>
-                                    {lang.toUpperCase()}
-                                  </span>
-                                </div>
-                                {/* Адаптированный хук */}
-                                <p className="text-slate-800 text-sm leading-relaxed font-medium">{hook.adapted}</p>
-                                {/* Объяснение */}
-                                <p className="mt-2 text-[11px] text-slate-400 leading-relaxed italic">{hook.explanation}</p>
-                                {/* Оригинал */}
-                                <div className="mt-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
-                                  <p className="text-[9px] uppercase tracking-wider text-slate-400 mb-1 font-semibold">Оригинал</p>
-                                  <p className="text-[11px] text-slate-500 leading-relaxed">{hook.original}</p>
-                                  {hook.url && (
-                                    <a href={hook.url} target="_blank" rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 mt-1.5 text-[10px] text-slate-400 hover:text-slate-600 transition-colors">
-                                      <ExternalLink className="w-2.5 h-2.5" />
-                                      {hook.owner_username ? `@${hook.owner_username}` : 'Видео'}
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Копировать */}
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(hook.adapted);
-                                  setCopiedAiHookIdx(idx);
-                                  setTimeout(() => setCopiedAiHookIdx(null), 2000);
-                                }}
-                                className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors mt-0.5"
-                                title="Скопировать адаптированный хук"
-                              >
-                                {copiedAiHookIdx === idx
-                                  ? <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                  : <Copy className="w-3.5 h-3.5" />
-                                }
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="px-4 py-5 text-center text-sm text-slate-400">
-                    Нет хуков по выбранному фильтру
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Script content - всегда textarea */}
             <div className="flex-1 md:overflow-hidden p-4">
               <textarea
@@ -2461,6 +2353,148 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
         onClose={() => setShowCopyStylesModal(false)}
         sourceProject={currentProject}
       />
+
+      {/* ИИ-хуки — floating dropdown panel */}
+      {showAiHooksPanel && aiHooksPanelAnchor && createPortal(
+        <>
+          {/* Закрыть по клику вне панели */}
+          <div
+            className="fixed inset-0 z-[34900]"
+            onClick={() => !isGeneratingAiHook && setShowAiHooksPanel(false)}
+          />
+          <div
+            className="fixed z-[35000] flex flex-col bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden"
+            style={{
+              top: aiHooksPanelAnchor.top,
+              left: aiHooksPanelAnchor.left,
+              width: Math.min(400, window.innerWidth - 16),
+              maxHeight: Math.min(580, window.innerHeight - aiHooksPanelAnchor.top - 12),
+            }}
+          >
+            {/* Заголовок */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <Zap className="w-4 h-4" />
+                ИИ-хуки
+              </span>
+              {!isGeneratingAiHook && (
+                <button
+                  onClick={() => setShowAiHooksPanel(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {isGeneratingAiHook ? (
+              <div className="flex items-center gap-3 px-4 py-5 flex-shrink-0">
+                <div className="relative flex-shrink-0 w-9 h-9">
+                  <div className="w-9 h-9 rounded-full border-2 border-slate-200 border-t-slate-600 animate-spin" />
+                  <Zap className="w-4 h-4 text-slate-500 absolute inset-0 m-auto" />
+                </div>
+                <div>
+                  <p className="text-slate-700 text-sm font-medium">Анализируем вирусные хуки...</p>
+                  <p className="text-slate-400 text-xs mt-0.5">Семантический поиск + адаптация под ваш сценарий</p>
+                </div>
+              </div>
+            ) : sortedFilteredHooks.length > 0 ? (
+              <>
+                {/* Контролы */}
+                <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100 flex-shrink-0 flex-wrap gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3" />
+                    {aiHookResults.length} хуков
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-0.5 bg-slate-200/70 rounded-md p-0.5">
+                      {(['all', 'ru', 'en'] as const).map(lang => (
+                        <button
+                          key={lang}
+                          onClick={() => setAiHookLangFilter(lang)}
+                          className={cn(
+                            'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
+                            aiHookLangFilter === lang ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                          )}
+                        >
+                          {lang === 'all' ? 'Все' : lang.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setAiHookSortBy(v => v === 'relevance' ? 'views' : 'relevance')}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-slate-500 hover:bg-slate-200 transition-colors"
+                    >
+                      <ArrowDownUp className="w-3 h-3" />
+                      {aiHookSortBy === 'relevance' ? 'По релевантности' : 'По просмотрам'}
+                    </button>
+                  </div>
+                </div>
+                {/* Список хуков */}
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                  {sortedFilteredHooks.map((hook, idx) => {
+                    const lang = detectHookLang(hook.original);
+                    return (
+                      <div key={idx} className="p-4 hover:bg-slate-50/60 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-semibold text-slate-400 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                                <Eye className="w-2.5 h-2.5" />{hook.views}
+                              </span>
+                              <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{hook.niche}</span>
+                              <span className={cn(
+                                'text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold tracking-wide',
+                                lang === 'ru' ? 'bg-blue-50 text-blue-500' : 'bg-amber-50 text-amber-600'
+                              )}>
+                                {lang.toUpperCase()}
+                              </span>
+                            </div>
+                            <p className="text-slate-800 text-sm leading-relaxed font-medium">{hook.adapted}</p>
+                            <p className="mt-2 text-[11px] text-slate-400 leading-relaxed italic">{hook.explanation}</p>
+                            <div className="mt-2.5 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
+                              <p className="text-[9px] uppercase tracking-wider text-slate-400 mb-1 font-semibold">Оригинал</p>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">{hook.original}</p>
+                              {hook.url && (
+                                <a href={hook.url} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 mt-1.5 text-[10px] text-slate-400 hover:text-slate-600 transition-colors">
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                  {hook.owner_username ? `@${hook.owner_username}` : 'Видео'}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(hook.adapted);
+                              setCopiedAiHookIdx(idx);
+                              setTimeout(() => setCopiedAiHookIdx(null), 2000);
+                            }}
+                            className="flex-shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors mt-0.5"
+                          >
+                            {copiedAiHookIdx === idx
+                              ? <Check className="w-3.5 h-3.5 text-emerald-500" />
+                              : <Copy className="w-3.5 h-3.5" />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="px-4 py-5 text-center text-sm text-slate-400">
+                Нет хуков по выбранному фильтру
+              </div>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
 
       <StyleTrainModal
         open={showStyleTrainModal}
