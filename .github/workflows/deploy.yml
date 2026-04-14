@@ -1,0 +1,95 @@
+name: Deploy to CapRover
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get CapRover token
+        id: auth
+        run: |
+          TOKEN=$(curl -s -X POST http://95.182.100.126:3000/api/v2/login \
+            -H "Content-Type: application/json" \
+            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}" \
+            | jq -r '.data.token')
+          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+            echo "Failed to get token"
+            exit 1
+          fi
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Create captain-definition for backend
+        run: |
+          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.backend"}' > captain-definition
+
+      - name: Package backend
+        run: |
+          tar -czf /tmp/backend.tar.gz \
+            --exclude='./node_modules' \
+            --exclude='./.git' \
+            --exclude='./dist' \
+            -C . .
+
+      - name: Deploy backend to CapRover
+        run: |
+          curl -X POST http://95.182.100.126:3000/api/v2/user/apps/appData/riri-be-dev \
+            -H "x-captain-auth: ${{ steps.auth.outputs.token }}" \
+            -F "sourceFile=@/tmp/backend.tar.gz"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_TELEGRAM_BOT_TOKEN: ${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+
+      - name: Get CapRover token
+        id: auth
+        run: |
+          TOKEN=$(curl -s -X POST http://95.182.100.126:3000/api/v2/login \
+            -H "Content-Type: application/json" \
+            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}" \
+            | jq -r '.data.token')
+          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+            echo "Failed to get token"
+            exit 1
+          fi
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Create captain-definition for frontend
+        run: |
+          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition-frontend
+
+      - name: Package frontend (with built dist/)
+        run: |
+          tar -czf /tmp/frontend.tar.gz \
+            dist/ \
+            nginx.conf \
+            Dockerfile.frontend \
+            captain-definition-frontend
+
+      - name: Deploy frontend to CapRover
+        run: |
+          curl -X POST http://95.182.100.126:3000/api/v2/user/apps/appData/riri-fe-dev \
+            -H "x-captain-auth: ${{ steps.auth.outputs.token }}" \
+            -F "sourceFile=@/tmp/frontend.tar.gz"

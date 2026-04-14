@@ -16,6 +16,8 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 
 # Editor directories and files
 .vscode/*
@@ -30,3 +32,24 @@ dist-ssr
 
 # Large unused assets (optimized versions used instead)
 public/riri-coin-large.png
+
+# CapRover
+caprover-config.json
+.caprover/
+captain-definition
+captain-definition-frontend
+
+# Vercel
+.vercel/
+
+# Keys and Secrets
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Build artifacts
+/tmp/*.tar.gz
+.next/

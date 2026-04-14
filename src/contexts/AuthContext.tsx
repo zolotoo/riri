@@ -70,7 +70,21 @@ const clearSession = () => {
 };
 
 const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
-const generateSessionToken = () => crypto.randomUUID() + '-' + Date.now();
+
+// FALLBACK FOR HTTP (non-secure context) where crypto.randomUUID might be missing
+const generateSessionToken = () => {
+  try {
+    // Check if crypto exists AND has randomUUID (it's often missing in HTTP)
+    if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID() + '-' + Date.now();
+    }
+  } catch (e) {
+    console.warn('[Auth] crypto.randomUUID failed, using fallback');
+  }
+  // Universal fallback that works in any browser/context
+  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);
+  return s4() + s4() + '-' + s4() + '-' + s4() + '-' + s4() + '-' + s4() + s4() + s4() + '-' + Date.now();
+};
 
 const setCookie = (name: string, value: string, days: number = 30) => {
   const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
@@ -258,12 +272,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const code = generateCode();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
       const { error: dbError } = await supabase
         .from('auth_codes')
-        .insert({ telegram_username: cleanUsername, code });
+        .insert({ 
+          telegram_username: cleanUsername, 
+          code,
+          expires_at: expiresAt
+        });
 
       if (dbError) {
+        console.error('[Auth] sendTelegramCode DB error:', dbError);
         setError('Что-то пошло не так. Попробуй ещё раз');
         return false;
       }
@@ -400,19 +420,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
+    console.log('[Auth] Verifying code for:', pendingUsername, 'Code:', code.trim());
+    const now = new Date();
+
     try {
+      // Step 1: Just find the code regardless of time first to see if it exists
       const { data, error: dbError } = await supabase
         .from('auth_codes')
         .select('*')
         .eq('telegram_username', pendingUsername)
         .eq('code', code.trim())
         .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (dbError || !data || data.length === 0) {
-        setError('Код не подходит или истёк. Запроси новый');
+      if (dbError) {
+        console.error('[Auth] Supabase error during verification:', dbError);
+        setError('Ошибка базы данных. Попробуй ещё раз');
+        return false;
+      }
+
+      console.log('[Auth] Supabase found code record:', data);
+
+      if (!data || data.length === 0) {
+        setError('Код не подходит. Запроси новый');
+        return false;
+      }
+
+      // Step 2: Manual expiry check with 1-hour drift tolerance
+      const expiryDate = new Date(data[0].expires_at);
+      console.log('[Auth] Client time:', now.toISOString());
+      console.log('[Auth] Code expiry:', expiryDate.toISOString());
+
+      // If code is older than now AND the difference is more than 1 hour (drift protection)
+      if (expiryDate.getTime() < now.getTime() - (60 * 60 * 1000)) {
+        setError('Код истёк. Запроси новый');
         return false;
       }
 

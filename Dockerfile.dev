@@ -1,0 +1,15 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install Vercel CLI globally
+RUN npm install -g vercel
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Command to run vercel dev
+CMD ["vercel", "dev", "--listen", "3000", "--yes"]
