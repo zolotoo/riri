@@ -59,17 +59,29 @@ jobs:
 
       - name: Build frontend
         run: |
-          echo "Checking environment variables..."
-          if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ VITE_SUPABASE_URL is MISSING"; else echo "✅ VITE_SUPABASE_URL is set (length: ${#VITE_SUPABASE_URL})"; fi
-          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then echo "❌ VITE_SUPABASE_ANON_KEY is MISSING"; else echo "✅ VITE_SUPABASE_ANON_KEY is set (length: ${#VITE_SUPABASE_ANON_KEY})"; fi
+          # 1. Проверка секретов. ЕСЛИ ТУТ ПУСТО - БУДЕТ ОШИБКА В ACTIONS
+          echo "Verifying required GitHub Secrets..."
+          MISSING=0
+          if [ -z "${{ secrets.VITE_SUPABASE_URL }}" ]; then echo "❌ ERROR: VITE_SUPABASE_URL is not set in GitHub Secrets!"; MISSING=1; fi
+          if [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then echo "❌ ERROR: VITE_SUPABASE_ANON_KEY is not set!"; MISSING=1; fi
           
+          if [ $MISSING -eq 1 ]; then 
+            echo "Please go to Settings -> Secrets and variables -> Actions and add these secrets!"
+            exit 1 
+          fi
+
+          # 2. Создаем файл .env.production. Это САМЫЙ надежный способ для Vite
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" > .env.production
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env.production
+          echo "VITE_TELEGRAM_BOT_TOKEN=${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}" >> .env.production
+          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env.production
+          echo "VITE_OPENAI_API_KEY=${{ secrets.VITE_OPENAI_API_KEY }}" >> .env.production
+          
+          echo "✅ .env.production created successfully"
+          
+          # 3. Сборка (Vite автоматически подхватит .env.production)
           npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_TELEGRAM_BOT_TOKEN: ${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+
 
       - name: Get CapRover token
         id: auth

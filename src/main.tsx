@@ -18,7 +18,8 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AuthProvider>
       <App />
-      <Analytics />
+      {/* Analytics removed because it only works on Vercel hosting */}
+      {/* <Analytics /> */}
     </AuthProvider>
   </React.StrictMode>,
 );
