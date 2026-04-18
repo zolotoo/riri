@@ -26,26 +26,28 @@ jobs:
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Create captain-definition for backend
-        run: |
-          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.backend"}' > captain-definition
-
       - name: Package backend
         run: |
           tar -czf /tmp/backend.tar.gz \
-            captain-definition \
+            captain-definition-backend \
             Dockerfile.backend \
             server.js \
             package.json \
             package-lock.json \
             api \
             lib
+          
+          # Rename for backend
+          mkdir -p /tmp/be-extract
+          tar -xzf /tmp/backend.tar.gz -C /tmp/be-extract
+          mv /tmp/be-extract/captain-definition-backend /tmp/be-extract/captain-definition
+          cd /tmp/be-extract && tar -czf /tmp/backend-final.tar.gz .
 
       - name: Deploy backend to CapRover
         run: |
           curl -X POST http://95.182.100.126:3000/api/v2/user/apps/appData/riri-be-dev \
             -H "x-captain-auth: ${{ steps.auth.outputs.token }}" \
-            -F "sourceFile=@/tmp/backend.tar.gz"
+            -F "sourceFile=@/tmp/backend-final.tar.gz"
 
   deploy-frontend:
     runs-on: ubuntu-latest
@@ -61,12 +63,7 @@ jobs:
         run: npm ci
 
       - name: Build frontend
-        run: |
-          echo "Checking environment variables..."
-          if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ VITE_SUPABASE_URL is MISSING"; else echo "✅ VITE_SUPABASE_URL is set"; fi
-          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then echo "❌ VITE_SUPABASE_ANON_KEY is MISSING"; else echo "✅ VITE_SUPABASE_ANON_KEY is set"; fi
-          
-          npm run build
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -74,26 +71,18 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
 
-      - name: Prepare captain-definition in dist
+      - name: Create CapRover archive
         run: |
-          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition
-          cp captain-definition dist/captain-definition
-          cp nginx.conf dist/nginx.conf
-          cp Dockerfile.frontend dist/Dockerfile.frontend
+          # Включаем dist, nginx.conf и Dockerfile вместе с captain-definition
+          tar -czf frontend.tar.gz dist/ captain-definition nginx.conf Dockerfile
           
-          echo "=== dist/ contents ==="
-          ls -la dist/
-          echo "=== captain-definition content ==="
-          cat dist/captain-definition
-
-      - name: Create deployment archive
-        run: |
-          cd dist
-          tar -czf ../frontend.tar.gz .
-          cd ..
+          echo "=== Archive root level ==="
+          tar -tzf frontend.tar.gz | grep -v "^dist/" | head -10
           
-          echo "=== Archive contents (checking captain-definition) ==="
-          tar -tzf frontend.tar.gz | grep captain || echo "❌ captain-definition NOT in archive!"
+          echo "=== Verifying captain-definition ==="
+          tar -tzf frontend.tar.gz | grep "^captain-definition$" \
+            && echo "✅ captain-definition found in archive" \
+            || (echo "❌ captain-definition MISSING" && exit 1)
 
       - name: Get CapRover token
         id: auth
