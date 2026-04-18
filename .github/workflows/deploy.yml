@@ -21,7 +21,6 @@ jobs:
           
           if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
             echo "Error: Failed to get token"
-            echo "Response: $RESPONSE"
             exit 1
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
@@ -65,15 +64,26 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
           VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
         run: |
-          echo "Verifying required GitHub Secrets..."
-          if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ ERROR: VITE_SUPABASE_URL is MISSING"; exit 1; fi
-          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then echo "❌ ERROR: VITE_SUPABASE_ANON_KEY is MISSING"; exit 1; fi
-          
-          echo "✅ Secrets verified, starting build..."
+          echo "Verifying secrets..."
+          if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ VITE_SUPABASE_URL MISSING"; exit 1; fi
           npm run build
+
+      - name: Prepare and Package Frontend
+        run: |
+          # 1. Создаем captain-definition
+          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition
           
-          echo "📂 Built assets:"
-          ls dist/assets/index-*.js
+          # 2. Упаковываем файлы ПРЯМО из текущей папки, без ./ префикса
+          # Важно: файлы должны быть в корне архива
+          tar -czf /tmp/frontend.tar.gz \
+            dist \
+            nginx.conf \
+            Dockerfile.frontend \
+            captain-definition
+            
+          # 3. ДИАГНОСТИКА: выводим список файлов в архиве
+          echo "📂 Содержимое архива (captain-definition ДОЛЖЕН БЫТЬ ТУТ):"
+          tar -tf /tmp/frontend.tar.gz
 
       - name: Get CapRover token
         id: auth
@@ -81,27 +91,9 @@ jobs:
           RESPONSE=$(curl -s -L -X POST http://95.182.100.126:3000/api/v2/login \
             -H "Content-Type: application/json" \
             -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}")
-          
           TOKEN=$(echo $RESPONSE | jq -r '.data.token // empty')
-          
-          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
-            echo "Error: Failed to get token"
-            echo "Response: $RESPONSE"
-            exit 1
-          fi
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then exit 1; fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
-
-      - name: Create captain-definition for frontend
-        run: |
-          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition
-
-      - name: Package frontend (with built dist/)
-        run: |
-          tar -czf /tmp/frontend.tar.gz \
-            dist/ \
-            nginx.conf \
-            Dockerfile.frontend \
-            captain-definition
 
       - name: Deploy frontend to CapRover
         run: |
