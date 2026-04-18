@@ -13,12 +13,15 @@ jobs:
       - name: Get CapRover token
         id: auth
         run: |
-          TOKEN=$(curl -s -X POST http://95.182.100.126:3000/api/v2/login \
+          RESPONSE=$(curl -s -L -X POST http://95.182.100.126:3000/api/v2/login \
             -H "Content-Type: application/json" \
-            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}" \
-            | jq -r '.data.token')
-          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
-            echo "Failed to get token"
+            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}")
+          
+          TOKEN=$(echo $RESPONSE | jq -r '.data.token // empty')
+          
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "Error: Failed to get token"
+            echo "Response: $RESPONSE"
             exit 1
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
@@ -55,7 +58,12 @@ jobs:
         run: npm ci
 
       - name: Build frontend
-        run: npm run build
+        run: |
+          echo "Checking environment variables..."
+          if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ VITE_SUPABASE_URL is MISSING"; else echo "✅ VITE_SUPABASE_URL is set (length: ${#VITE_SUPABASE_URL})"; fi
+          if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then echo "❌ VITE_SUPABASE_ANON_KEY is MISSING"; else echo "✅ VITE_SUPABASE_ANON_KEY is set (length: ${#VITE_SUPABASE_ANON_KEY})"; fi
+          
+          npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -66,19 +74,22 @@ jobs:
       - name: Get CapRover token
         id: auth
         run: |
-          TOKEN=$(curl -s -X POST http://95.182.100.126:3000/api/v2/login \
+          RESPONSE=$(curl -s -L -X POST http://95.182.100.126:3000/api/v2/login \
             -H "Content-Type: application/json" \
-            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}" \
-            | jq -r '.data.token')
-          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
-            echo "Failed to get token"
+            -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}")
+          
+          TOKEN=$(echo $RESPONSE | jq -r '.data.token // empty')
+          
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "Error: Failed to get token"
+            echo "Response: $RESPONSE"
             exit 1
           fi
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       - name: Create captain-definition for frontend
         run: |
-          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition-frontend
+          echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition
 
       - name: Package frontend (with built dist/)
         run: |
@@ -86,7 +97,7 @@ jobs:
             dist/ \
             nginx.conf \
             Dockerfile.frontend \
-            captain-definition-frontend
+            captain-definition
 
       - name: Deploy frontend to CapRover
         run: |
