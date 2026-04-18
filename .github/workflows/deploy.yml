@@ -56,38 +56,57 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+- name: Build frontend
+  env:
+    VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+    VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    VITE_TELEGRAM_BOT_TOKEN: ${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}
+    VITE_API_URL: ${{ secrets.VITE_API_URL }}
+    VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+  run: |
+    echo "Verifying required GitHub Secrets..."
+    if [ -z "$VITE_SUPABASE_URL" ]; then echo "❌ ERROR: VITE_SUPABASE_URL is MISSING"; exit 1; fi
+    if [ -z "$VITE_SUPABASE_ANON_KEY" ]; then echo "❌ ERROR: VITE_SUPABASE_ANON_KEY is MISSING"; exit 1; fi
 
-      - name: Build frontend
-        run: |
-          # 1. Проверка секретов. ЕСЛИ ТУТ ПУСТО - БУДЕТ ОШИБКА В ACTIONS
-          echo "Verifying required GitHub Secrets..."
-          MISSING=0
-          if [ -z "${{ secrets.VITE_SUPABASE_URL }}" ]; then echo "❌ ERROR: VITE_SUPABASE_URL is not set in GitHub Secrets!"; MISSING=1; fi
-          if [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then echo "❌ ERROR: VITE_SUPABASE_ANON_KEY is not set!"; MISSING=1; fi
-          
-          if [ $MISSING -eq 1 ]; then 
-            echo "Please go to Settings -> Secrets and variables -> Actions and add these secrets!"
-            exit 1 
-          fi
+    echo "✅ Secrets verified, starting build..."
+    npm run build
 
-          # 2. Создаем файл .env.production. Это САМЫЙ надежный способ для Vite
-          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" > .env.production
-          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env.production
-          echo "VITE_TELEGRAM_BOT_TOKEN=${{ secrets.VITE_TELEGRAM_BOT_TOKEN }}" >> .env.production
-          echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env.production
-          echo "VITE_OPENAI_API_KEY=${{ secrets.VITE_OPENAI_API_KEY }}" >> .env.production
-          
-          echo "✅ .env.production created successfully"
-          
-          # 3. Сборка (Vite автоматически подхватит .env.production)
-          npm run build
+    echo "📂 Built assets (check if index hash changed):"
+    ls dist/assets/index-*.js
 
+- name: Create captain-definition for frontend
+  run: |
+    echo '{"schemaVersion":2,"dockerfilePath":"./Dockerfile.frontend"}' > captain-definition
 
-      - name: Get CapRover token
-        id: auth
-        run: |
-          RESPONSE=$(curl -s -L -X POST http://95.182.100.126:3000/api/v2/login \
-            -H "Content-Type: application/json" \
+- name: Get CapRover token
+  id: auth
+  run: |
+    RESPONSE=$(curl -s -L -X POST http://95.182.100.126:3000/api/v2/login \
+      -H "Content-Type: application/json" \
+      -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}")
+
+    TOKEN=$(echo $RESPONSE | jq -r '.data.token // empty')
+
+    if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+      echo "Error: Failed to get token"
+      echo "Response: $RESPONSE"
+      exit 1
+    fi
+    echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+- name: Package frontend (with built dist/)
+  run: |
+    tar -czf /tmp/frontend.tar.gz \
+      dist/ \
+      nginx.conf \
+      Dockerfile.frontend \
+      captain-definition
+
+- name: Deploy frontend to CapRover
+  run: |
+    curl -X POST http://95.182.100.126:3000/api/v2/user/apps/appData/riri-fe-dev \
+      -H "x-captain-auth: ${{ steps.auth.outputs.token }}" \
+      -F "sourceFile=@/tmp/frontend.tar.gz"
             -d "{\"password\":\"${{ secrets.CAPROVER_PASSWORD }}\"}")
           
           TOKEN=$(echo $RESPONSE | jq -r '.data.token // empty')
