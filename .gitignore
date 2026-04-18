@@ -47,3 +47,5 @@ credentials/
 # Build artifacts
 /tmp/*.tar.gz
 .next/
+.claude/
+.cursor/
