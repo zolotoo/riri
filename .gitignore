@@ -33,12 +33,6 @@ dist-ssr
 # Large unused assets (optimized versions used instead)
 public/riri-coin-large.png
 
-# CapRover
-caprover-config.json
-.caprover/
-captain-definition
-captain-definition-frontend
-
 # Vercel
 .vercel/
 
