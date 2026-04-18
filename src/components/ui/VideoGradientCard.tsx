@@ -255,7 +255,7 @@ export const VideoGradientCard = ({
                 }}
               />
               <img
-                src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl)}
+                src={imgError ? PLACEHOLDER_270x360 : proxyImageUrl(thumbnailUrl, shortcode)}
                 alt=""
                 className={cn(
                   "absolute inset-0 w-full h-full object-cover transition-opacity duration-150",

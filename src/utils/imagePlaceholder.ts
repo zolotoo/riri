@@ -45,11 +45,18 @@ function unwrapWsrvUrl(url: string): string {
  * URL для отображения изображений.
  * - Распаковывает wsrv.nl (в БД могли остаться битые ссылки)
  * - Прямые URL (Instagram, workers.dev) — запрос с IP пользователя
+ * - Если есть shortcode — использует наш умный прокси /api/proxy-image (авто-оживление)
  * - При ошибке onError → refresh → сохранение в Storage
  */
-export function proxyImageUrl(url?: string, emptyPlaceholder = PLACEHOLDER_270x360): string {
+export function proxyImageUrl(url?: string, shortcode?: string, emptyPlaceholder = PLACEHOLDER_270x360): string {
   if (!url) return emptyPlaceholder;
   if (url.startsWith('data:')) return url;
+  
+  // Если у нас есть shortcode, используем наш прокси, который умеет оживлять ссылки
+  if (shortcode && (url.includes('cdninstagram.com') || url.includes('fbcdn.net') || url.includes('workers.dev'))) {
+    return `/api/proxy-image?shortcode=${shortcode}`;
+  }
+
   const unwrapped = unwrapWsrvUrl(url);
   if (unwrapped.includes('wsrv.nl')) return emptyPlaceholder;
   return unwrapped;
