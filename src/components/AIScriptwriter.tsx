@@ -343,6 +343,34 @@ export function AIScriptwriter() {
     }
   }, [styles.length, messages.length, genStep]);
 
+  // Prefill from «Анализ конкурента» — идея из ResultView
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('riri:competitor-idea');
+      if (!raw) return;
+      sessionStorage.removeItem('riri:competitor-idea');
+      const { idea, competitor_username } = JSON.parse(raw) as {
+        idea: { title: string; adapted_hook: string; structure_outline?: string; why_it_works?: string };
+        competitor_username?: string;
+      };
+      if (!idea?.title) return;
+      const topicText = [
+        idea.title,
+        '',
+        `Хук: ${idea.adapted_hook}`,
+        idea.structure_outline ? `\nСтруктура:\n${idea.structure_outline}` : '',
+      ].filter(Boolean).join('\n');
+      setActiveTab('chat');
+      setGenMode('topic');
+      setGenTopic(topicText);
+      setGenStep('topic');
+      setMessages([
+        { id: 'init', role: 'riri', text: `Идея из разбора${competitor_username ? ` @${competitor_username}` : ''} — я её подставил как тему. Проверь и жми отправить, дальше соберу сценарий.` },
+      ]);
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Helpers ──
   const addMsg = useCallback((role: 'riri' | 'user', text: string) => {
     setMessages(prev => [...prev, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, role, text }]);

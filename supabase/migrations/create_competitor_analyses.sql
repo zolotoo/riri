@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS competitor_hooks (
   niche TEXT,
   is_fallback BOOLEAN DEFAULT FALSE,
   rank INTEGER,
+  transcript_id TEXT,
+  video_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(analysis_id, shortcode)
 );
@@ -66,6 +68,8 @@ CREATE TABLE IF NOT EXISTS user_reel_snapshots (
   view_count INTEGER,
   like_count INTEGER,
   taken_at TIMESTAMPTZ,
+  transcript_id TEXT,
+  video_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(analysis_id, shortcode)
 );

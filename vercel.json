@@ -1,6 +1,11 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/reel-info", "destination": "/api/instagram?_op=reel-info" },
+    { "source": "/api/user-reels", "destination": "/api/instagram?_op=user-reels" },
+    { "source": "/api/reels-search", "destination": "/api/instagram?_op=reels-search" }
+  ],
   "functions": {
     "api/save-media.js": {
       "maxDuration": 60
@@ -10,6 +15,9 @@
     },
     "api/riri-chat.js": {
       "maxDuration": 30
+    },
+    "api/competitor-analyze.js": {
+      "maxDuration": 60
     }
   }
 }

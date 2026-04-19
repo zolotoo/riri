@@ -62,6 +62,15 @@ export function LoadingStage({
       setCurrent(data as CompetitorAnalysis);
       onAnalysisUpdate();
       const st = (data as CompetitorAnalysis).status;
+      // Прогрессируем state-machine на бэке
+      const nonTerminal = ['transcribing_competitor', 'extracting_hooks', 'transcribing_user', 'analyzing_user', 'generating_ideas'];
+      if (nonTerminal.includes(st)) {
+        fetch('/api/competitor-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tick', analysisId: analysis.id }),
+        }).catch(() => {});
+      }
       if (phase === 'competitor') {
         if (st === 'fetching_user' || st === 'ready') { onGoUserInput?.(); return; }
         if (st === 'no_virals') { onNoVirals(); return; }
@@ -72,7 +81,7 @@ export function LoadingStage({
       }
     };
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 4000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [analysis.id, phase]);
 

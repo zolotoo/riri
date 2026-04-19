@@ -818,7 +818,7 @@ function AppContent() {
             {viewMode === 'profile' && <ProfilePage />}
             {viewMode === 'usage' && isAdmin && <UsageStats />}
             {viewMode === 'carousel-editor' && <CarouselEditor projectId={currentProjectId} userId={user?.id} />}
-            {viewMode === 'competitor' && <CompetitorAnalysisPage />}
+            {viewMode === 'competitor' && <CompetitorAnalysisPage onNavigateToScriptwriter={() => setViewMode('scriptwriter')} />}
           </motion.div>
         </AnimatePresence>
       </div>

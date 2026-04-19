@@ -17,7 +17,7 @@ import { ResultView } from './ResultView';
 
 type Step = 'landing' | 'competitor-input' | 'competitor-loading' | 'user-input' | 'user-loading' | 'result';
 
-export function CompetitorAnalysisPage() {
+export function CompetitorAnalysisPage({ onNavigateToScriptwriter }: { onNavigateToScriptwriter?: () => void } = {}) {
   const { currentProjectId } = useProjectContext();
   const { user } = useAuth();
   const { analyses, loading, reload, remove } = useCompetitorAnalysis(
@@ -203,7 +203,20 @@ export function CompetitorAnalysisPage() {
 
           {step === 'result' && activeAnalysis && (
             <motion.div key="result" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
-              <ResultView analysis={activeAnalysis} onBack={resetFlow} />
+              <ResultView
+                analysis={activeAnalysis}
+                onBack={resetFlow}
+                onUseIdea={(idea) => {
+                  try {
+                    sessionStorage.setItem('riri:competitor-idea', JSON.stringify({
+                      idea,
+                      competitor_username: activeAnalysis.competitor_username,
+                      analysis_id: activeAnalysis.id,
+                    }));
+                  } catch { /* ignore */ }
+                  onNavigateToScriptwriter?.();
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
