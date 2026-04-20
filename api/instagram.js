@@ -73,17 +73,19 @@ async function reelInfo(req, res) {
 
         const carouselMedia = media.carousel_media || (media.carousel_media_count && media.children?.items) || media.edge_sidecar_to_children?.edges;
         let carousel_slides = [];
+        // edge_sidecar_to_children возвращает { node: { display_url, ... } } — раскрываем node
         const getImageUrl = (item) => {
-          return item.image_versions2?.candidates?.[0]?.url
-            || item.image_versions?.candidates?.[0]?.url
-            || item.image_versions?.items?.[0]?.url
-            || item.image_versions2?.items?.[0]?.url
-            || item.display_url
-            || item.images?.standard_resolution?.url
-            || item.images?.low_resolution?.url
-            || item.thumbnail_src
-            || item.url
-            || (item.video_versions?.[0]?.url ? item.video_versions[0].url : null);
+          const n = item.node || item;
+          return n.image_versions2?.candidates?.[0]?.url
+            || n.image_versions?.candidates?.[0]?.url
+            || n.image_versions?.items?.[0]?.url
+            || n.image_versions2?.items?.[0]?.url
+            || n.display_url
+            || n.images?.standard_resolution?.url
+            || n.images?.low_resolution?.url
+            || n.thumbnail_src
+            || n.url
+            || (n.video_versions?.[0]?.url ? n.video_versions[0].url : null);
         };
         if (Array.isArray(carouselMedia) && carouselMedia.length > 0) {
           carousel_slides = carouselMedia.map((item, i) => {
@@ -96,7 +98,7 @@ async function reelInfo(req, res) {
             index: i,
           })).filter(s => s.url);
         }
-        const is_carousel = carousel_slides.length > 1;
+        const is_carousel = carousel_slides.length >= 1 || media.carousel_media_count > 0 || !!media.edge_sidecar_to_children;
 
         const candidates = media.image_versions2?.candidates || media.image_versions?.candidates || [];
         const cdnUrl = candidates.find((c) => {
