@@ -336,7 +336,11 @@ async function saveSelectedReels(sb, analysisId, reels, bottom3Baseline, isFallb
     rank: idx + 1,
   }));
   if (!rows.length) return;
-  await sb.from('competitor_hooks').upsert(rows, { onConflict: 'analysis_id,shortcode' });
+  const { error } = await sb.from('competitor_hooks').upsert(rows, { onConflict: 'analysis_id,shortcode' });
+  if (error) {
+    console.error('[saveSelectedReels] upsert failed', { analysisId, count: rows.length, error });
+    throw new Error(`competitor_hooks upsert failed: ${error.message}`);
+  }
 }
 
 async function kickoffCompetitorTranscriptions(sb, baseUrl, analysisId) {

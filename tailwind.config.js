@@ -93,9 +93,9 @@ export default {
           '0 32px 80px -16px rgba(0, 0, 0, 0.14), 0 16px 40px -12px rgba(0, 0, 0, 0.08)',
       },
       backdropBlur: {
-        'glass': '20px',
-        'glass-xl': '24px',
-        'glass-2xl': '32px',
+        'glass': '6px',
+        'glass-xl': '8px',
+        'glass-2xl': '10px',
       },
     },
   },

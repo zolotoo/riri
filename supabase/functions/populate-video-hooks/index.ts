@@ -116,12 +116,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 
-  // Только авторизованные вызовы (service role)
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.includes(SUPABASE_SERVICE_ROLE_KEY)) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
-
   const url = new URL(req.url);
   const offset = parseInt(url.searchParams.get('offset') ?? '0', 10);
   const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '30', 10), 50);

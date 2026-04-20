@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { Link, Radar, LayoutGrid, FileText, Users, ArrowRight } from 'lucide-react';
 const DISPLAY_NAME_KEY = 'riri-display-name';
 const ONBOARDING_DONE_KEY = 'riri-onboarding-done';
@@ -116,12 +115,7 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
             }}
           >
             {/* Greeting — friendly headline (phrase lighter, name bolder like reference) */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-              className="mb-6 md:mb-10"
-            >
+            <div className="mb-6 md:mb-10 fade-in-up">
               <h1 className="text-2xl md:text-3xl font-bold leading-tight font-heading">
                 <span className="text-slate-500">{greeting},</span>{' '}
                 <span className="text-slate-800 italic">{name}</span>
@@ -129,20 +123,18 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
               <p className="text-slate-500 text-base md:text-lg font-normal leading-tight mt-1.5 font-heading">
                 Что хочешь сделать сегодня?
               </p>
-            </motion.div>
+            </div>
 
             {/* Two main gradient action cards — compact height, layered shadows, visible gradient */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
               {GRADIENT_CARDS.map((card, i) => (
-                <motion.div
+                <div
                   key={card.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: i * 0.05 }}
-                  className="relative rounded-2xl md:rounded-3xl overflow-hidden text-white cursor-pointer group"
+                  className="relative rounded-2xl md:rounded-3xl overflow-hidden text-white cursor-pointer group fade-in-up"
                   style={{
                     ...card.gradientStyle,
                     boxShadow: '0 16px 48px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.14)',
+                    animationDelay: `${i * 50}ms`,
                   }}
                   onClick={() => card.onAction(onOpenSearch)}
                 >
@@ -205,24 +197,22 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
                       </span>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
 
             {/* Three white cards below — iOS 26: 1 col на мобильных */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-5">
               {WHITE_CARDS.map((card, i) => (
-                <motion.button
+                <button
                   key={card.id}
                   type="button"
                   onClick={() => (card.id === 'team' ? onOpenTeam() : onOpenFeed())}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.1 + i * 0.05 }}
-                  className="relative rounded-2xl p-4 md:p-6 text-left border border-white/55 bg-white/66 backdrop-blur-glass hover:bg-white/78 hover:border-white/70 transition-all duration-200 group overflow-hidden active:scale-[0.99] touch-manipulation"
+                  className="relative rounded-2xl p-4 md:p-6 text-left border border-white/55 bg-white/78 hover:bg-white/90 hover:border-white/70 transition-colors duration-200 group overflow-hidden active:scale-[0.99] touch-manipulation fade-in-up"
                   style={{
                     boxShadow:
                       '0 8px 24px rgba(15,23,42,0.045), 0 2px 10px rgba(15,23,42,0.03), inset 0 1px 0 rgba(255,255,255,0.72)',
+                    animationDelay: `${100 + i * 50}ms`,
                   }}
                 >
                   {/* Subtle underlay */}
@@ -264,7 +254,7 @@ export function Dashboard({ onOpenSearch, onOpenFeed, onOpenTeam, videosCount = 
                       <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
-                </motion.button>
+                </button>
               ))}
             </div>
           </div>

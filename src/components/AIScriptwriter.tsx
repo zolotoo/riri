@@ -87,12 +87,6 @@ interface GenState {
   messages: ChatMsg[];
 }
 
-const msgAnim = {
-  initial: { opacity: 0, y: 12, scale: 0.97 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  transition: iosSpringSoft,
-};
-
 // ─── Shared UI ───────────────────────────────────────────────────────────────
 
 function GlassCard({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -128,10 +122,8 @@ function CostBtn({ onClick, disabled, loading, cost, children, variant = 'primar
 function RiriOrb({ size = 160, floating = false, className }: { size?: number; floating?: boolean; className?: string }) {
   const s = size;
   return (
-    <motion.div
-      className={cn('rounded-full flex-shrink-0 select-none', className)}
-      animate={floating ? { y: [-6, 6, -6], scale: [1, 1.016, 1] } : undefined}
-      transition={floating ? { duration: 5.2, repeat: Infinity, ease: 'easeInOut' } : undefined}
+    <div
+      className={cn('rounded-full flex-shrink-0 select-none', floating && 'riri-orb-float', className)}
       style={{
         width: s,
         height: s,
@@ -149,7 +141,7 @@ function RiriOrb({ size = 160, floating = false, className }: { size?: number; f
 
 function RiriBubble({ text }: { text: string }) {
   return (
-    <motion.div {...msgAnim} className="flex gap-2.5 items-start max-w-[85%]">
+    <div className="flex gap-2.5 items-start max-w-[85%] fade-in-up">
       <RiriOrb size={26} className="mt-0.5" />
       <div
         className="px-3.5 py-2.5 rounded-[18px] rounded-tl-[6px]"
@@ -161,13 +153,13 @@ function RiriBubble({ text }: { text: string }) {
       >
         <p className="text-[15px] text-[#1a1a18] leading-[1.55] whitespace-pre-wrap">{text}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function UserBubble({ text }: { text: string }) {
   return (
-    <motion.div {...msgAnim} className="flex justify-end">
+    <div className="flex justify-end fade-in-up">
       <div
         className="px-3.5 py-2.5 rounded-[18px] rounded-tr-[6px] max-w-[80%]"
         style={{
@@ -177,13 +169,13 @@ function UserBubble({ text }: { text: string }) {
       >
         <p className="text-[15px] text-white/90 leading-[1.55] whitespace-pre-wrap">{text}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function TypingIndicator() {
   return (
-    <motion.div {...msgAnim} className="flex gap-2.5 items-start">
+    <div className="flex gap-2.5 items-start fade-in-up">
       <RiriOrb size={26} />
       <div
         className="px-4 py-3 rounded-[18px] rounded-tl-[6px]"
@@ -194,15 +186,16 @@ function TypingIndicator() {
         }}
       >
         <div className="flex gap-1">
-          {[0, 1, 2].map(i => (
-            <motion.div key={i} className="w-2 h-2 rounded-full bg-slate-300"
-              animate={{ opacity: [0.35, 1, 0.35] }}
-              transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.22 }}
+          {[0, 0.22, 0.44].map((delay, i) => (
+            <div
+              key={i}
+              className="w-2 h-2 rounded-full bg-slate-300 typing-dot"
+              style={{ animationDelay: `${delay}s` }}
             />
           ))}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -973,7 +966,7 @@ export function AIScriptwriter() {
 
                 {/* Clarify questions */}
                 {genStep === 'clarify' && !genLoading && (
-                  <motion.div {...msgAnim} className="space-y-3 pl-9">
+                  <div className="space-y-3 pl-9 fade-in-up">
                     {genQuestions.map((q, qi) => (
                       <GlassCard key={qi} className="p-3">
                         <p className="text-xs font-medium text-slate-700 mb-2">{q.question}</p>
@@ -987,12 +980,12 @@ export function AIScriptwriter() {
                         <input type="text" value={!q.options.includes(genAnswers[qi] || '') ? genAnswers[qi] || '' : ''} onChange={e => setGenAnswers(prev => { const n = [...prev]; n[qi] = e.target.value; return n; })} placeholder="Свой вариант..." className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300" />
                       </GlassCard>
                     ))}
-                  </motion.div>
+                  </div>
                 )}
 
                 {/* Hooks selection */}
                 {genStep === 'hooks' && !genLoading && (
-                  <motion.div {...msgAnim} className="space-y-2 pl-9">
+                  <div className="space-y-2 pl-9 fade-in-up">
                     {genHooks.map((hook, i) => (
                       <div key={i} className={cn('rounded-2xl border p-3 transition-all cursor-pointer touch-manipulation', selectedHookIdx === i ? 'bg-slate-50 border-slate-300 shadow-glass-sm' : 'bg-white/70 border-white/50 hover:bg-white/90')} onClick={() => { setSelectedHookIdx(i); setEditingHookIdx(null); }}>
                         <div className="flex items-start justify-between gap-2">
@@ -1014,12 +1007,12 @@ export function AIScriptwriter() {
                       </div>
                     ))}
                     <p className="text-[10px] text-slate-400 mt-2 pl-7">Напиши в чат, что не так - перегенерирую с учётом фидбека</p>
-                  </motion.div>
+                  </div>
                 )}
 
                 {/* Body selection */}
                 {genStep === 'body' && !genLoading && (
-                  <motion.div {...msgAnim} className="space-y-2 pl-9">
+                  <div className="space-y-2 pl-9 fade-in-up">
                     <div className="px-3 py-2 rounded-xl bg-slate-100/60 border border-slate-200/50 mb-2">
                       <p className="text-[10px] text-slate-400 mb-0.5">Хук:</p>
                       <p className="text-xs text-slate-600 line-clamp-2">{hookTexts[selectedHookIdx]}</p>
@@ -1045,12 +1038,12 @@ export function AIScriptwriter() {
                       </div>
                     ))}
                     <p className="text-[10px] text-slate-400 mt-2 pl-7">Напиши в чат, что не так - перегенерирую</p>
-                  </motion.div>
+                  </div>
                 )}
 
                 {/* Final script */}
                 {genStep === 'final' && !genLoading && genFinalScript && (
-                  <motion.div {...msgAnim} className="space-y-3 pl-9">
+                  <div className="space-y-3 pl-9 fade-in-up">
                     <GlassCard className="p-4">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[11px] font-medium text-slate-500">Финальный сценарий</p>
@@ -1062,12 +1055,12 @@ export function AIScriptwriter() {
                       <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{genFinalScript}</p>
                     </GlassCard>
                     {/* Action buttons rendered as chips above prompt */}
-                  </motion.div>
+                  </div>
                 )}
 
                 {/* Retrain info */}
                 {genStep === 'retrain' && !genLoading && (
-                  <motion.div {...msgAnim} className="pl-9">
+                  <div className="pl-9 fade-in-up">
                     <GlassCard className="p-3">
                       <p className="text-xs font-medium text-slate-600 mb-2">Что будет учтено при дообучении:</p>
                       <div className="space-y-1.5">
@@ -1076,7 +1069,7 @@ export function AIScriptwriter() {
                         <div className="flex items-center gap-1.5"><Check className="w-3 h-3 text-emerald-500" /><p className="text-[11px] text-slate-600">Выборы и финальный сценарий</p></div>
                       </div>
                     </GlassCard>
-                  </motion.div>
+                  </div>
                 )}
 
                 <div ref={chatEndRef} />

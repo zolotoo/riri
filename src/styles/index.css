@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Lightweight CSS entrance animation (replaces Framer Motion in lists) ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.fade-in-up {
+  animation: fadeInUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+@keyframes ririOrbFloat {
+  0%, 100% { transform: translate3d(0, -4px, 0) scale(1); }
+  50%      { transform: translate3d(0, 4px, 0) scale(1.012); }
+}
+.riri-orb-float {
+  animation: ririOrbFloat 5.2s ease-in-out infinite;
+}
+
+@keyframes typingDot {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+.typing-dot {
+  animation: typingDot 1.2s infinite;
+}
+
 /* ─── Area Chart CSS Variables ───────────────────────────────────────────── */
 :root {
   --chart-background: rgba(255, 255, 255, 0.9);
@@ -86,37 +112,37 @@
 
 /* Glass effect utilities - enhanced glassmorphism */
 .glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 
+  box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .glass-dark {
-  background: rgba(30, 25, 20, 0.85);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: rgba(30, 25, 20, 0.92);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
 .glass-light {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: 
+  box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .glass-button {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.85);
   box-shadow: 
     0 2px 12px rgba(0, 0, 0, 0.05),
@@ -133,9 +159,9 @@
 }
 
 .glass-button-dark {
-  background: rgba(60, 50, 40, 0.75);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(60, 50, 40, 0.88);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -549,8 +575,8 @@ body {
 }
 
 .canvas-dark .react-flow__controls {
-  background: rgba(30, 25, 20, 0.7) !important;
-  backdrop-filter: blur(20px);
+  background: rgba(30, 25, 20, 0.9) !important;
+  backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 1rem !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
@@ -573,8 +599,8 @@ body {
 }
 
 .canvas-dark .react-flow__minimap {
-  background: rgba(30, 25, 20, 0.6) !important;
-  backdrop-filter: blur(20px);
+  background: rgba(30, 25, 20, 0.88) !important;
+  backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 1rem !important;
   overflow: hidden;
@@ -650,18 +676,20 @@ body {
   scrollbar-width: none;  /* Firefox */
 }
 
-/* Smooth transitions */
-* {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+/* Smooth transitions — only on interactive elements, NOT on every element.
+   Глобальный `*` transition на filter/backdrop-filter/box-shadow/transform
+   вызывал перерисовку/перекомпозицию слоёв на каждое изменение и ронял FPS. */
+a, button, [role="button"], input, select, textarea, summary {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
-/* Glass morphism effect */
+/* Glass morphism effect (duplicate override — keep in sync with main .glass above) */
 .glass {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
@@ -715,11 +743,10 @@ body {
 .glass-tab-button.active {
   background: linear-gradient(135deg, #f97316 0%, #fb923c 50%, #fdba74 100%);
   color: white;
-  box-shadow: 
+  box-shadow:
     0 4px 15px rgba(249, 115, 22, 0.3),
     0 2px 4px rgba(0, 0, 0, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(20px) saturate(180%);
 }
 
 .glass-tab-button.active::after {
@@ -733,8 +760,8 @@ body {
 }
 
 .glass-tab-button:not(.active) {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.85);
   color: #475569;
 }
@@ -753,8 +780,8 @@ body {
   gap: 0.5rem;
   padding: 0.5rem;
   border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(24px) saturate(180%);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, 0.75);
   box-shadow: 
     0 4px 24px rgba(0, 0, 0, 0.06),

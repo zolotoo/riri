@@ -8,23 +8,13 @@ interface Message {
   content: string;
 }
 
-const iosSpringSoft = { type: 'spring' as const, stiffness: 340, damping: 32 };
-
-const msgAnim = {
-  initial: { opacity: 0, y: 12, scale: 0.97 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  transition: iosSpringSoft,
-};
-
 // ─── Riri Orb (3D CSS sphere — как в AIScriptwriter) ────────────────────────
 
 function RiriOrb({ size = 48, floating = false, className }: { size?: number; floating?: boolean; className?: string }) {
   const s = size;
   return (
-    <motion.div
-      className={`rounded-full flex-shrink-0 select-none ${className || ''}`}
-      animate={floating ? { y: [-4, 4, -4], scale: [1, 1.012, 1] } : undefined}
-      transition={floating ? { duration: 5.2, repeat: Infinity, ease: 'easeInOut' } : undefined}
+    <div
+      className={`rounded-full flex-shrink-0 select-none ${floating ? 'riri-orb-float' : ''} ${className || ''}`}
       style={{
         width: s,
         height: s,
@@ -44,7 +34,7 @@ function RiriOrb({ size = 48, floating = false, className }: { size?: number; fl
 
 function RiriBubble({ text }: { text: string }) {
   return (
-    <motion.div {...msgAnim} className="flex gap-2.5 items-start max-w-[85%]">
+    <div className="flex gap-2.5 items-start max-w-[85%] fade-in-up">
       <RiriOrb size={26} className="mt-0.5" />
       <div
         className="px-3.5 py-2.5 rounded-[18px] rounded-tl-[6px]"
@@ -56,13 +46,13 @@ function RiriBubble({ text }: { text: string }) {
       >
         <p className="text-[14px] text-[#1a1a18] leading-[1.55] whitespace-pre-wrap">{text}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function UserBubble({ text }: { text: string }) {
   return (
-    <motion.div {...msgAnim} className="flex justify-end">
+    <div className="flex justify-end fade-in-up">
       <div
         className="px-3.5 py-2.5 rounded-[18px] rounded-tr-[6px] max-w-[80%]"
         style={{
@@ -72,13 +62,13 @@ function UserBubble({ text }: { text: string }) {
       >
         <p className="text-[14px] text-white/90 leading-[1.55] whitespace-pre-wrap">{text}</p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 function TypingIndicator() {
   return (
-    <motion.div {...msgAnim} className="flex gap-2.5 items-start">
+    <div className="flex gap-2.5 items-start fade-in-up">
       <RiriOrb size={26} className="mt-0.5" />
       <div
         className="px-4 py-3 rounded-[18px] rounded-tl-[6px]"
@@ -90,16 +80,15 @@ function TypingIndicator() {
       >
         <div className="flex gap-1.5">
           {[0, 0.22, 0.44].map((delay, i) => (
-            <motion.span
+            <span
               key={i}
-              className="w-[5px] h-[5px] bg-slate-300 rounded-full"
-              animate={{ opacity: [0.35, 1, 0.35] }}
-              transition={{ duration: 1.2, repeat: Infinity, delay }}
+              className="w-[5px] h-[5px] bg-slate-300 rounded-full typing-dot"
+              style={{ animationDelay: `${delay}s` }}
             />
           ))}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
