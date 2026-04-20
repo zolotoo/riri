@@ -193,19 +193,20 @@ async function handleStartUser(req, res) {
 
     // Сохраняем 12 роликов как снэпшоты, стартуем транскрибации последовательно
     for (const r of reels) {
-      await sb.from('user_reel_snapshots').upsert(
+      const { error: upErr } = await sb.from('user_reel_snapshots').upsert(
         {
           analysis_id: analysisId,
-          shortcode: r.shortcode,
-          url: r.url,
-          thumbnail_url: r.thumbnail_url,
-          caption: r.caption,
+          shortcode: sanitizeText(r.shortcode),
+          url: sanitizeText(r.url),
+          thumbnail_url: sanitizeText(r.thumbnail_url),
+          caption: sanitizeText(r.caption),
           view_count: r.view_count,
           like_count: r.like_count,
           taken_at: r.taken_at ? new Date(r.taken_at * 1000).toISOString() : null,
         },
         { onConflict: 'analysis_id,shortcode' }
       );
+      if (upErr) console.error('[start-user] user_reel_snapshots upsert failed', upErr, r.shortcode);
     }
 
     await kickoffUserTranscriptions(sb, baseUrl, analysisId);
@@ -320,13 +321,24 @@ async function updateStatus(sb, analysisId, status, message, error) {
   await sb.from('competitor_analyses').update(patch).eq('id', analysisId);
 }
 
+// Postgres не принимает \u0000 и суррогатные половинки в JSON — чистим их в тексте
+function sanitizeText(s) {
+  if (s == null) return s;
+  if (typeof s !== 'string') return s;
+  return s
+    // убираем NULL-байты и прочие управляющие (кроме \t \n \r)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    // убираем незаменённые суррогатные половинки
+    .replace(/[\uD800-\uDFFF]/g, '');
+}
+
 async function saveSelectedReels(sb, analysisId, reels, bottom3Baseline, isFallback) {
   const rows = reels.map((r, idx) => ({
     analysis_id: analysisId,
-    shortcode: r.shortcode,
-    url: r.url,
-    thumbnail_url: r.thumbnail_url,
-    caption: r.caption,
+    shortcode: sanitizeText(r.shortcode),
+    url: sanitizeText(r.url),
+    thumbnail_url: sanitizeText(r.thumbnail_url),
+    caption: sanitizeText(r.caption),
     view_count: r.view_count,
     like_count: r.like_count,
     comment_count: r.comment_count,
@@ -339,7 +351,7 @@ async function saveSelectedReels(sb, analysisId, reels, bottom3Baseline, isFallb
   const { error } = await sb.from('competitor_hooks').upsert(rows, { onConflict: 'analysis_id,shortcode' });
   if (error) {
     console.error('[saveSelectedReels] upsert failed', { analysisId, count: rows.length, error, sampleRow: rows[0] });
-    throw new Error(`competitor_hooks upsert failed: ${error.message}; sampleRow=${JSON.stringify(rows[0])}`);
+    throw new Error(`competitor_hooks upsert failed: ${error.message}`);
   }
 }
 
