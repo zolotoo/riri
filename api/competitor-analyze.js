@@ -424,20 +424,20 @@ async function extractHooksForAnalysis(sb, openrouterKey, analysisId, hooks) {
       view_count: h.view_count,
     }));
   if (!items.length) return;
-  console.log('[extractHooksForAnalysis] items:', items.length, 'analysisId:', analysisId);
   const CHUNK = 5;
   const allResults = [];
+  const debug = [];
   for (let i = 0; i < items.length; i += CHUNK) {
     const chunk = items.slice(i, i + CHUNK);
     try {
       const results = await extractHooksBatch(openrouterKey, chunk);
-      console.log(`[extractHooksForAnalysis] chunk ${i / CHUNK + 1}: input=${chunk.length} output=${results?.length || 0}`);
+      debug.push(`chunk${i / CHUNK + 1}:in=${chunk.length}/out=${results?.length || 0}`);
       if (Array.isArray(results)) allResults.push(...results);
     } catch (e) {
-      console.error('[extractHooksForAnalysis] chunk failed', { i, error: e?.message });
+      debug.push(`chunk${i / CHUNK + 1}:ERR=${(e?.message || String(e)).slice(0, 140)}`);
     }
   }
-  console.log('[extractHooksForAnalysis] total results:', allResults.length);
+  console.log(`[extractHooksForAnalysis] items=${items.length} total=${allResults.length} analysisId=${analysisId} ${debug.join(' | ')}`);
   for (const r of allResults) {
     if (!r?.shortcode) continue;
     const { error: updErr } = await sb
