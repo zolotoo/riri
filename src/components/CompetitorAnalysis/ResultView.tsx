@@ -48,7 +48,8 @@ export function ResultView({ analysis, onBack, onUseIdea, onAddAnother }: {
     return m;
   }, [hooks]);
 
-  // Полим аналитику, пока идей нет, и дотикиваем пайплайн на бэке
+  // Полим аналитику (только READ!) пока идей нет — без tick'ов, чтобы не
+  // плодить параллельные вызовы Gemini Pro. За прогрессом следит LoadingStage.
   useEffect(() => {
     if (ideas.length > 0) return;
     let cancelled = false;
@@ -60,18 +61,9 @@ export function ResultView({ analysis, onBack, onUseIdea, onAddAnother }: {
         .maybeSingle();
       if (cancelled || !data) return;
       setLiveAnalysis(data as CompetitorAnalysis);
-      const st = (data as CompetitorAnalysis).status;
-      const nonTerminal = ['transcribing_user', 'analyzing_user', 'generating_ideas'];
-      if (nonTerminal.includes(st)) {
-        fetch('/api/competitor-analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tick', analysisId: analysis.id }),
-        }).catch(() => {});
-      }
     };
     poll();
-    const interval = setInterval(poll, 4000);
+    const interval = setInterval(poll, 6000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [analysis.id, ideas.length]);
 
@@ -89,6 +81,14 @@ export function ResultView({ analysis, onBack, onUseIdea, onAddAnother }: {
   const avg = liveAnalysis.competitor_avg_views || 0;
   const maxMult = hooks.reduce((m, h) => Math.max(m, h.viral_multiplier || 0), 0);
   const isFallback = !!hooks[0]?.is_fallback;
+
+  // Форматируем мультипликатор: x26227 — бессмысленное число (артефакт малого
+  // avg_bottom3), ограничиваем сверху «x100+» для читаемости
+  const formatMult = (m: number | null | undefined): string | null => {
+    if (!m || m < 2) return null;
+    if (m >= 100) return 'x100+';
+    return `x${Math.round(m)}`;
+  };
 
   return (
     <div>
@@ -116,7 +116,7 @@ export function ResultView({ analysis, onBack, onUseIdea, onAddAnother }: {
         <Kpi
           label="Топ залётного"
           value={topHook?.view_count ? formatViews(topHook.view_count) : '—'}
-          hint={maxMult ? `x${Math.round(maxMult)} к обычному` : undefined}
+          hint={formatMult(maxMult) ? `${formatMult(maxMult)} к обычному` : undefined}
           accent="orange"
         />
         <Kpi
@@ -268,7 +268,10 @@ function HooksPanel({ hooks, loading, isFallback }: {
 
 function HookRow({ hook }: { hook: CompetitorHook }) {
   const [copied, setCopied] = useState(false);
-  const text = hook.hook_text || (hook.transcript_text ? hook.transcript_text.slice(0, 140) : '');
+  const rawTranscript = hook.transcript_text && !hook.transcript_text.startsWith('__ERR__')
+    ? hook.transcript_text
+    : '';
+  const text = hook.hook_text || (rawTranscript ? rawTranscript.slice(0, 140) : '');
   const mult = hook.viral_multiplier ? Math.round(hook.viral_multiplier) : null;
 
   const copy = () => {
@@ -292,7 +295,7 @@ function HookRow({ hook }: { hook: CompetitorHook }) {
             />
             {mult && mult >= 3 && (
               <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 shadow-sm">
-                x{mult}
+                {mult >= 100 ? 'x100+' : `x${mult}`}
               </div>
             )}
           </div>
@@ -589,7 +592,9 @@ function IdeaCard({ idea, index, sourceHook, onUse }: {
               {sourceHook.view_count?.toLocaleString('ru-RU')} просмотров
             </span>
             {sourceHook.viral_multiplier && sourceHook.viral_multiplier >= 3 && (
-              <span className="text-orange-600 font-semibold">· x{Math.round(sourceHook.viral_multiplier)}</span>
+              <span className="text-orange-600 font-semibold">
+                · {sourceHook.viral_multiplier >= 100 ? 'x100+' : `x${Math.round(sourceHook.viral_multiplier)}`}
+              </span>
             )}
           </span>
           {sourceHook.url && (

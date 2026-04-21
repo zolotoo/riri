@@ -266,6 +266,10 @@ async function handleTick(req, res) {
   }
 
   if (status === 'analyzing_user') {
+    // Lease: если кто-то уже занимается этим шагом <120с назад — пропускаем tick.
+    if (!(await tryAcquireLease(sb, analysisId, 'analyzing_user'))) {
+      return res.status(200).json({ status: 'analyzing_user', busy: true });
+    }
     try {
       const { data: snaps } = await sb.from('user_reel_snapshots').select('*').eq('analysis_id', analysisId);
       const tone = await analyzeUserTone(openrouterKey, snaps || [], analysis.user_username || '');
@@ -279,6 +283,9 @@ async function handleTick(req, res) {
   }
 
   if (status === 'generating_ideas') {
+    if (!(await tryAcquireLease(sb, analysisId, 'generating_ideas'))) {
+      return res.status(200).json({ status: 'generating_ideas', busy: true });
+    }
     try {
       const { data: snaps } = await sb.from('user_reel_snapshots').select('*').eq('analysis_id', analysisId);
       const { data: hooks } = await sb
@@ -314,6 +321,37 @@ async function updateStatus(sb, analysisId, status, message, error) {
   if (message !== undefined) patch.status_message = message;
   if (error !== undefined) patch.error_message = error;
   await sb.from('competitor_analyses').update(patch).eq('id', analysisId);
+}
+
+/**
+ * Попытка взять lease на тяжёлый LLM-шаг. Пишем sentinel в status_message
+ * вида "__LEASE__<step>:<ts>". Если уже есть свежий lease (<120с) на этот шаг —
+ * возвращаем false. Это защита от параллельных tick'ов, которые иначе запустят
+ * Gemini Pro несколько раз за $0.05 каждый.
+ */
+async function tryAcquireLease(sb, analysisId, step, ttlSeconds = 120) {
+  const { data } = await sb
+    .from('competitor_analyses')
+    .select('status_message, updated_at')
+    .eq('id', analysisId)
+    .single();
+  const msg = data?.status_message || '';
+  const match = msg.match(/^__LEASE__([a-z_]+):(\d+)$/);
+  if (match) {
+    const leaseStep = match[1];
+    const ts = parseInt(match[2], 10);
+    const ageSec = (Date.now() - ts) / 1000;
+    if (leaseStep === step && ageSec < ttlSeconds) {
+      console.warn(`[tryAcquireLease] busy: ${step} locked ${Math.round(ageSec)}s ago`);
+      return false;
+    }
+  }
+  const leaseTag = `__LEASE__${step}:${Date.now()}`;
+  await sb
+    .from('competitor_analyses')
+    .update({ status_message: leaseTag, updated_at: new Date().toISOString() })
+    .eq('id', analysisId);
+  return true;
 }
 
 // Postgres не принимает \u0000 и суррогатные половинки в JSON — чистим их в тексте
