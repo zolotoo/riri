@@ -386,16 +386,17 @@ async function kickoffOne(sb, baseUrl, table, row) {
     await sb.from(table).update({ transcript_text: transcript || '' }).eq('id', row.id);
     console.log(`[kickoff] ok ${row.shortcode} len=${(transcript || '').length}`);
   } catch (e) {
-    console.error(`[kickoff] failed ${table} ${row.shortcode}: ${e.message || e}`);
-    // Всё равно помечаем пустым, чтобы не блокировать пайплайн
-    await sb.from(table).update({ transcript_text: '' }).eq('id', row.id);
+    const msg = String(e?.message || e).slice(0, 500);
+    console.error(`[kickoff] failed ${table} ${row.shortcode}: ${msg}`);
+    // Пишем ошибку прямо в transcript_text с сентинелом — дальше поймаем SQL-ом
+    await sb.from(table).update({ transcript_text: `__ERR__ ${msg}` }).eq('id', row.id);
   }
 }
 
 
 async function extractHooksForAnalysis(sb, openrouterKey, analysisId, hooks) {
   const items = (hooks || [])
-    .filter((h) => h.transcript_text && !h.hook_text)
+    .filter((h) => h.transcript_text && !h.transcript_text.startsWith('__ERR__') && !h.hook_text)
     .map((h) => ({
       shortcode: h.shortcode,
       transcript_text: h.transcript_text,
