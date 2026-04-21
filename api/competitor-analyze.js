@@ -376,6 +376,7 @@ async function kickoffOne(sb, baseUrl, table, row) {
     if (!videoUrl) {
       videoUrl = await fetchReelInfo(baseUrl, row.url);
       if (!videoUrl) {
+        console.warn(`[kickoff] ${row.shortcode} no video_url from reel-info`);
         await sb.from(table).update({ transcript_text: '' }).eq('id', row.id);
         return;
       }
@@ -383,8 +384,9 @@ async function kickoffOne(sb, baseUrl, table, row) {
     }
     const transcript = await transcribeWithGemini(openrouterKey, videoUrl);
     await sb.from(table).update({ transcript_text: transcript || '' }).eq('id', row.id);
+    console.log(`[kickoff] ok ${row.shortcode} len=${(transcript || '').length}`);
   } catch (e) {
-    console.warn('[kickoff] failed', table, row.shortcode, e.message);
+    console.error(`[kickoff] failed ${table} ${row.shortcode}: ${e.message || e}`);
     // Всё равно помечаем пустым, чтобы не блокировать пайплайн
     await sb.from(table).update({ transcript_text: '' }).eq('id', row.id);
   }
