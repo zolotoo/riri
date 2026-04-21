@@ -121,23 +121,45 @@ export function LoadingStage({
   const info = phaseMap[current.status] || { title: 'Работаю…', sub: 'Секунду' };
 
   return (
-    <div className="flex flex-col items-center text-center pt-10">
-      <RiriOrb size={148} floating />
-      <div className="mt-6 flex items-center gap-2">
-        <span className="text-xs uppercase tracking-[0.18em] text-slate-400 font-medium">RIRI AI</span>
-      </div>
-      <AnimatePresence mode="wait">
-        <motion.h2
-          key={info.title}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.3 }}
-          className="mt-3 text-[22px] md:text-[26px] font-semibold text-[#1a1a18]"
+    <div className="relative flex flex-col items-center text-center pt-10">
+      {/* мягкое фоновое сияние */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] opacity-70 -z-0"
+        animate={{
+          background: [
+            'radial-gradient(500px 220px at 30% 40%, rgba(250,204,21,0.18), transparent 60%)',
+            'radial-gradient(500px 220px at 70% 40%, rgba(99,102,241,0.18), transparent 60%)',
+            'radial-gradient(500px 220px at 30% 40%, rgba(250,204,21,0.18), transparent 60%)',
+          ],
+        }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      <div className="relative z-10 flex flex-col items-center">
+        <RiriOrb size={148} floating />
+
+        {/* Большой мерцающий бренд RiRi AI */}
+        <motion.div
+          className="mt-6 text-[44px] md:text-[56px] font-bold tracking-tight leading-none bg-clip-text text-transparent bg-[linear-gradient(110deg,#1a1a18_35%,#cbd5e1_50%,#1a1a18_65%)] bg-[length:200%_100%]"
+          animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
+          transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
         >
-          {info.title}
-        </motion.h2>
-      </AnimatePresence>
+          RiRi AI
+        </motion.div>
+
+        <AnimatePresence mode="wait">
+          <motion.h2
+            key={info.title}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.3 }}
+            className="mt-4 text-[20px] md:text-[24px] font-semibold text-[#1a1a18]"
+          >
+            {info.title}
+          </motion.h2>
+        </AnimatePresence>
       <AnimatePresence mode="wait">
         <motion.p
           key={info.sub}
@@ -150,9 +172,10 @@ export function LoadingStage({
           {info.sub}
         </motion.p>
       </AnimatePresence>
-      {current.status_message && (
-        <p className="mt-3 text-xs text-slate-400">{current.status_message}</p>
-      )}
+        {current.status_message && (
+          <p className="mt-3 text-xs text-slate-400">{current.status_message}</p>
+        )}
+      </div>
     </div>
   );
 }

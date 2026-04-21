@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeft, ExternalLink, Flame, Sparkles, Eye, Lightbulb, Volume2 } from 'lucide-react';
 import { GlassCard } from './GlassCard';
+import { RiriOrb } from './RiriOrb';
 import { supabase } from '../../utils/supabase';
 import type { CompetitorAnalysis, CompetitorHook, GeneratedIdea, UserToneProfile } from '../../hooks/useCompetitorAnalysis';
 
@@ -11,6 +13,8 @@ export function ResultView({ analysis, onBack, onUseIdea }: {
 }) {
   const [hooks, setHooks] = useState<CompetitorHook[]>([]);
   const [loadingHooks, setLoadingHooks] = useState(true);
+  const [liveAnalysis, setLiveAnalysis] = useState<CompetitorAnalysis>(analysis);
+  const ideasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,8 +32,45 @@ export function ResultView({ analysis, onBack, onUseIdea }: {
     return () => { cancelled = true; };
   }, [analysis.id]);
 
-  const ideas = (analysis.generated_ideas?.ideas || []) as GeneratedIdea[];
-  const tone = analysis.user_tone_profile || {};
+  const ideas = (liveAnalysis.generated_ideas?.ideas || []) as GeneratedIdea[];
+  const tone = liveAnalysis.user_tone_profile || {};
+
+  // Полим аналитику, пока идей нет, и дотикиваем пайплайн на бэке
+  useEffect(() => {
+    if (ideas.length > 0) return;
+    let cancelled = false;
+    const poll = async () => {
+      const { data } = await supabase
+        .from('competitor_analyses')
+        .select('*')
+        .eq('id', analysis.id)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setLiveAnalysis(data as CompetitorAnalysis);
+      const st = (data as CompetitorAnalysis).status;
+      const nonTerminal = ['transcribing_user', 'analyzing_user', 'generating_ideas'];
+      if (nonTerminal.includes(st)) {
+        fetch('/api/competitor-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tick', analysisId: analysis.id }),
+        }).catch(() => {});
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [analysis.id, ideas.length]);
+
+  // Если идей ещё нет — автоскроллим вниз, чтобы лоадер был в поле зрения
+  useEffect(() => {
+    if (ideas.length === 0 && ideasRef.current) {
+      const t = setTimeout(() => {
+        ideasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [ideas.length]);
 
   return (
     <div>
@@ -58,14 +99,14 @@ export function ResultView({ analysis, onBack, onUseIdea }: {
       </div>
 
       {/* 10 идей */}
-      <div className="mt-8">
+      <div className="mt-8" ref={ideasRef}>
         <div className="flex items-center gap-2 mb-3 px-1">
           <Lightbulb className="w-4 h-4 text-slate-500" strokeWidth={2.5} />
           <h2 className="text-[16px] font-semibold text-[#1a1a18]">Идеи для сценариев</h2>
           <span className="text-xs text-slate-400">({ideas.length})</span>
         </div>
         {ideas.length === 0 ? (
-          <GlassCard className="p-5 text-sm text-slate-400">Идеи ещё генерируются. Обновите страницу через минуту.</GlassCard>
+          <IdeasLoader status={liveAnalysis.status} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {ideas.map((idea, i) => (
@@ -119,7 +160,9 @@ function HookRow({ hook }: { hook: CompetitorHook }) {
         )}
         <div className="flex-1 min-w-0">
           <p className="text-[13.5px] text-[#1a1a18] leading-snug line-clamp-3">
-            {hook.hook_text || hook.caption?.slice(0, 140) || '—'}
+            {hook.hook_text
+              || (hook.transcript_text ? hook.transcript_text.slice(0, 140) : null)
+              || <span className="text-slate-400 italic">Без речи (музыкальный ролик)</span>}
           </p>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
@@ -153,7 +196,7 @@ function HookRow({ hook }: { hook: CompetitorHook }) {
   );
 }
 
-function TonePanel({ username, tone }: { username: string; tone: UserToneProfile }) {
+function TonePanel({ tone }: { username: string; tone: UserToneProfile }) {
   const isEmpty = !tone || Object.keys(tone).length === 0;
   return (
     <GlassCard className="p-5">
@@ -218,6 +261,84 @@ function TagRow({ title, tags, variant }: { title: string; tags: string[]; varia
         ))}
       </div>
     </div>
+  );
+}
+
+function IdeasLoader({ status }: { status: string }) {
+  const label =
+    status === 'transcribing_user' ? 'Слушаю твои ролики'
+    : status === 'analyzing_user' ? 'Думаю о твоём стиле'
+    : status === 'generating_ideas' ? 'Склеиваю идеи'
+    : status === 'fetching_user' ? 'Смотрю на твой аккаунт'
+    : 'Собираю идеи';
+
+  return (
+    <GlassCard className="relative overflow-hidden p-8 md:p-10">
+      {/* мягкий фоновый градиент-свечение */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        initial={{ background: 'radial-gradient(600px 200px at 20% 50%, rgba(250,204,21,0.12), transparent 60%)' }}
+        animate={{
+          background: [
+            'radial-gradient(600px 200px at 20% 50%, rgba(250,204,21,0.12), transparent 60%)',
+            'radial-gradient(600px 200px at 80% 50%, rgba(99,102,241,0.14), transparent 60%)',
+            'radial-gradient(600px 200px at 20% 50%, rgba(250,204,21,0.12), transparent 60%)',
+          ],
+        }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      <div className="relative flex flex-col items-center text-center">
+        <RiriOrb size={72} floating />
+
+        {/* Большой, мерцающий бренд */}
+        <motion.div
+          className="mt-5 text-[34px] md:text-[44px] font-bold tracking-tight leading-none bg-clip-text text-transparent bg-[linear-gradient(110deg,#1a1a18_35%,#cbd5e1_50%,#1a1a18_65%)] bg-[length:200%_100%]"
+          animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
+          transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+        >
+          RiRi AI
+        </motion.div>
+
+        {/* подпись-этап */}
+        <div className="mt-3 flex items-center gap-2 text-[13px] text-slate-500">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+          </span>
+          <motion.span
+            key={label}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-medium"
+          >
+            {label}…
+          </motion.span>
+        </div>
+
+        <p className="mt-2 text-xs text-slate-400 max-w-sm">
+          Генерю 10 идей под твой голос. Обычно 40–90 секунд — страницу обновлять не надо.
+        </p>
+
+        {/* скелетоны идей для живости */}
+        <div className="mt-6 w-full grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[0, 1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              className="rounded-2xl border border-slate-100 bg-white/60 p-4 space-y-2"
+              animate={{ opacity: [0.55, 1, 0.55] }}
+              transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.25, ease: 'easeInOut' }}
+            >
+              <div className="h-3 w-2/3 bg-slate-200/80 rounded" />
+              <div className="h-2 w-full bg-slate-100 rounded" />
+              <div className="h-2 w-5/6 bg-slate-100 rounded" />
+              <div className="h-2 w-4/6 bg-slate-100 rounded" />
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </GlassCard>
   );
 }
 
