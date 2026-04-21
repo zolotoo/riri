@@ -5,12 +5,11 @@ import { IncomingVideo } from '../types';
 import { useAuth } from './useAuth';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { toast } from 'sonner';
-import {
-  getOrCreateGlobalVideo,
+import { 
+  getOrCreateGlobalVideo, 
   getTranscriptionByShortcode,
   startGlobalTranscription,
 } from '../services/globalVideoService';
-import { getProfileStats, calculateViralMultiplier } from '../services/profileStatsService';
 
 interface SavedVideo {
   id: string;
@@ -25,7 +24,6 @@ interface SavedVideo {
   like_count?: number;
   comment_count?: number;
   taken_at?: number;
-  viral_multiplier?: number | null;
   added_at: string;
   // Транскрибация и перевод
   download_url?: string;
@@ -129,7 +127,6 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     download_url?: string;
     storage_video_url?: string;
     taken_at?: number;
-    viral_multiplier?: number | null;
     draft_link?: string;
     final_link?: string;
     script_responsible?: string;
@@ -190,7 +187,6 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
       download_url: video.download_url,
       storage_video_url: video.storage_video_url,
       taken_at: video.taken_at,
-      viral_multiplier: video.viral_multiplier ?? null,
       draft_link: video.draft_link,
       final_link: video.final_link,
       script_responsible: video.script_responsible,
@@ -619,25 +615,12 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         .catch(() => {});
     }
 
-    // Рассчитываем множитель виральности, если статистика автора уже есть в БД.
-    // Парсинг профиля не запускаем — это делает только кнопка "Полный расчёт виральности".
-    let viralMultiplier: number | null = null;
-    if (!isManual && video.ownerUsername && video.viewCount) {
-      try {
-        const profileStats = await getProfileStats(video.ownerUsername);
-        viralMultiplier = calculateViralMultiplier(video.viewCount, profileStats);
-      } catch {
-        /* ignore — множитель останется null */
-      }
-    }
-
     let localVideo: (IncomingVideo & {
       view_count?: number;
       like_count?: number;
       comment_count?: number;
       owner_username?: string;
       taken_at?: number;
-      viral_multiplier?: number | null;
       is_manual?: boolean;
     }) | null = null;
 
@@ -654,7 +637,6 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         comment_count: video.commentCount,
         owner_username: video.ownerUsername,
         taken_at: takenAtTimestamp,
-        viral_multiplier: viralMultiplier,
       };
 
       // Оптимистичное обновление UI только для новых видео
@@ -702,8 +684,6 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         project_id: targetProjectId,
         folder_id: video.folderId || null,
         taken_at: takenAtTimestamp,
-        // Пишем только если посчитали — иначе не затираем уже сохранённое значение.
-        ...(viralMultiplier !== null && { viral_multiplier: viralMultiplier }),
       };
 
       if (existingTranscription?.hasTranscription) {

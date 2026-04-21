@@ -3,7 +3,6 @@ import { supabase } from '../utils/supabase';
 import { useAuth } from './useAuth';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { toast } from 'sonner';
-import { getProfileStats, calculateCarouselViralMultiplier } from '../services/profileStatsService';
 
 export interface CarouselSlideResult {
   slide_index: number;
@@ -37,7 +36,6 @@ export interface SavedCarousel {
   editing_responsible: string | null;
   links: { templateId?: string; label?: string; value: string }[] | null;
   responsibles: { templateId?: string; label?: string; value: string }[] | null;
-  viral_multiplier: number | null;
   added_at: string;
 }
 
@@ -72,7 +70,6 @@ function transformRow(row: any): SavedCarousel {
     editing_responsible: row.editing_responsible ?? null,
     links,
     responsibles,
-    viral_multiplier: row.viral_multiplier ?? null,
     added_at: row.added_at,
   };
 }
@@ -174,17 +171,6 @@ export function useCarousels() {
   }) => {
     const userId = getUserId();
     const targetProjectId = currentProjectId ?? null;
-    // Множитель считаем только если статистика автора уже есть в БД.
-    // Парсинг профиля — только по кнопке "Полный расчёт виральности".
-    let viralMultiplier: number | null = null;
-    if (payload.owner_username && payload.like_count) {
-      try {
-        const profileStats = await getProfileStats(payload.owner_username);
-        viralMultiplier = calculateCarouselViralMultiplier(payload.like_count, profileStats);
-      } catch {
-        /* ignore */
-      }
-    }
     try {
       const { data, error } = await supabase
         .from('saved_carousels')
@@ -202,7 +188,6 @@ export function useCarousels() {
           slide_count: payload.slide_count ?? (payload.slide_urls?.length ?? 0),
           thumbnail_url: payload.thumbnail_url ?? payload.slide_urls?.[0] ?? null,
           slide_urls: payload.slide_urls ?? null,
-          viral_multiplier: viralMultiplier,
         })
         .select()
         .single();
@@ -359,21 +344,6 @@ export function useCarousels() {
     }
   }, [updateCarouselSlideUrls]);
 
-  const updateCarouselViralMultiplier = useCallback(async (id: string, viralMultiplier: number | null) => {
-    try {
-      const { error } = await supabase
-        .from('saved_carousels')
-        .update({ viral_multiplier: viralMultiplier })
-        .eq('id', id);
-      if (error) return false;
-      setCarousels(prev => prev.map(c => c.id === id ? { ...c, viral_multiplier: viralMultiplier } : c));
-      return true;
-    } catch (err) {
-      console.error('updateCarouselViralMultiplier:', err);
-      return false;
-    }
-  }, []);
-
   const removeCarousel = useCallback(async (id: string) => {
     const item = carousels.find(c => c.id === id);
     try {
@@ -403,7 +373,6 @@ export function useCarousels() {
     updateCarouselSlideUrls,
     updateCarouselLinks,
     updateCarouselResponsibles,
-    updateCarouselViralMultiplier,
     removeCarousel,
     refreshCarouselThumbnail,
     refetch: fetchCarousels,

@@ -350,7 +350,7 @@ export function History() {
                   {incomingVideos.map((video, idx) => {
                     const videoData = video as any;
                     const thumbnailUrl = video.previewUrl;
-                    const viralMult: number | null = videoData.viral_multiplier ?? null;
+                    const viralCoef = calculateViralCoefficient(videoData.view_count, videoData.taken_at || videoData.receivedAt?.toISOString());
                     const dateText = formatVideoDate(videoData.taken_at || video.receivedAt);
                     
                     return (
@@ -362,7 +362,7 @@ export function History() {
                         viewCount={videoData.view_count}
                         likeCount={videoData.like_count}
                         date={dateText || '-'}
-                        viralMultiplier={viralMult}
+                        viralCoef={viralCoef}
                         videoId={!String(video.id).startsWith('local-') ? video.id : undefined}
                         shortcode={video.url?.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/)?.[1]}
                         onThumbnailError={refreshThumbnail}

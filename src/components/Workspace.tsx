@@ -17,7 +17,7 @@ import { VideoDetailPage } from './VideoDetailPage';
 import { CarouselDetailPage } from './CarouselDetailPage';
 import { useCarousels, type SavedCarousel } from '../hooks/useCarousels';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
-import { getProfileStats } from '../services/profileStatsService';
+import { calculateViralMultiplier, applyViralMultiplierToCoefficient, getProfileStats, calculateCarouselViralMultiplier } from '../services/profileStatsService';
 import { dialogScale, dialogSlideUp, backdropFade, iosSpringSoft } from '../utils/motionPresets';
 import { TokenBadge } from './ui/TokenBadge';
 import { GlassFolderIcon } from './ui/GlassFolderIcons';
@@ -40,6 +40,53 @@ function formatNumber(num?: number): string {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return String(num);
+}
+
+// Расчёт коэффициента виральности (K просмотров в день)
+function calculateViralCoefficient(views?: number, takenAt?: string | number | Date): number {
+  if (!views) return 0;
+  
+  let videoDate: Date | null = null;
+  
+  if (takenAt instanceof Date) {
+    videoDate = takenAt;
+  } else if (typeof takenAt === 'string') {
+    if (takenAt.includes('T') || takenAt.includes('-')) {
+      videoDate = new Date(takenAt);
+    } else {
+      const ts = Number(takenAt);
+      if (!isNaN(ts)) {
+        videoDate = new Date(ts * 1000);
+      }
+    }
+  } else if (typeof takenAt === 'number') {
+    videoDate = takenAt > 1e12 ? new Date(takenAt) : new Date(takenAt * 1000);
+  }
+  
+  if (!videoDate || isNaN(videoDate.getTime())) {
+    return Math.round((views / 30000) * 10) / 10;
+  }
+  
+  const today = new Date();
+  const diffTime = today.getTime() - videoDate.getTime();
+  const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+  
+  return Math.round((views / diffDays / 1000) * 10) / 10;
+}
+
+// Виральность карусели: лайки / (дни * 10) — х10 сила лайков (20 за 10k/50д, 100 за 10k/10д)
+function calculateCarouselViralCoefficient(likes?: number, takenAt?: number | string | null): number {
+  if (!likes || likes < 100 || takenAt == null) return 0;
+  let postDate: Date;
+  if (typeof takenAt === 'number') {
+    postDate = takenAt > 1e12 ? new Date(takenAt) : new Date(takenAt * 1000);
+  } else {
+    postDate = new Date(takenAt);
+  }
+  if (isNaN(postDate.getTime())) return 0;
+  const diffDays = Math.floor((Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return 0;
+  return Math.round((likes / (diffDays * 10)) * 10) / 10;
 }
 
 // Дата публикации карусели для карточки
@@ -88,10 +135,9 @@ export function Workspace(_props?: WorkspaceProps) {
   const [sortBy, setSortBy] = useState<'viral' | 'views' | 'likes' | 'date' | 'recent' | 'views_from_avg'>('viral');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showCarouselSortDropdown, setShowCarouselSortDropdown] = useState(false);
-  // v2 = фильтр по x-множителю виральности (старые значения были "K/день" и несовместимы по шкале)
   const [sortFilterMinViral, setSortFilterMinViral] = useState(() => {
     try {
-      const v = localStorage.getItem('workspace_sortFilterMinViral_v2');
+      const v = localStorage.getItem('workspace_sortFilterMinViral');
       return v ? Math.max(0, parseFloat(v) || 0) : 0;
     } catch { return 0; }
   });
@@ -104,7 +150,7 @@ export function Workspace(_props?: WorkspaceProps) {
   const [selectedFolderId, setSelectedFolderIdState] = useState<string | null>(null); // null = все видео (кроме "не подходит")
   
   useEffect(() => {
-    try { localStorage.setItem('workspace_sortFilterMinViral_v2', String(sortFilterMinViral)); } catch { /* ignore */ }
+    try { localStorage.setItem('workspace_sortFilterMinViral', String(sortFilterMinViral)); } catch { /* ignore */ }
   }, [sortFilterMinViral]);
   useEffect(() => {
     try { localStorage.setItem('workspace_sortFilterMinViews', String(sortFilterMinViews)); } catch { /* ignore */ }
@@ -205,8 +251,8 @@ export function Workspace(_props?: WorkspaceProps) {
     const copy = [...carousels];
     if (carouselSortBy === 'viral') {
       copy.sort((a, b) => {
-        const va = a.viral_multiplier ?? -1;
-        const vb = b.viral_multiplier ?? -1;
+        const va = calculateCarouselViralCoefficient(a.like_count, a.taken_at);
+        const vb = calculateCarouselViralCoefficient(b.like_count, b.taken_at);
         return vb - va;
       });
     } else if (carouselSortBy === 'likes') {
@@ -492,7 +538,12 @@ export function Workspace(_props?: WorkspaceProps) {
   
   // Фильтрация и сортировка видео
   const getSortedVideos = (videos: ZoneVideo[]): ZoneVideo[] => {
-    const withViral = (v: ZoneVideo) => ((v as any).viral_multiplier ?? 0) as number;
+    const withViral = (v: ZoneVideo) => {
+      const coef = calculateViralCoefficient(v.view_count, v.taken_at || v.created_at);
+      const profile = v.owner_username ? profileStatsCache.get(v.owner_username.toLowerCase()) : null;
+      const mult = calculateViralMultiplier(v.view_count || 0, profile);
+      return applyViralMultiplierToCoefficient(coef, mult);
+    };
     
     let filtered = videos;
     if (sortBy === 'viral' && sortFilterMinViral > 0) {
@@ -1312,7 +1363,7 @@ export function Workspace(_props?: WorkspaceProps) {
                       <p className="text-slate-500 text-xs md:text-sm tabular-nums mt-1">
                         {feedVideos.length} видео
                         {' • '}
-                        {sortBy === 'viral' && `виральность${sortFilterMinViral > 0 ? ` ≥${sortFilterMinViral}x` : ''}`}
+                        {sortBy === 'viral' && `виральность${sortFilterMinViral > 0 ? ` ≥${sortFilterMinViral}` : ''}`}
                         {sortBy === 'views' && `просмотры${sortFilterMinViews > 0 ? ` ≥${formatNumber(sortFilterMinViews)}` : ''}`}
                         {sortBy === 'views_from_avg' && `от среднего${sortFilterMinViews > 0 ? ` (≥${formatNumber(sortFilterMinViews)})` : ''}`}
                         {sortBy === 'likes' && 'лайки'}
@@ -1345,7 +1396,6 @@ export function Workspace(_props?: WorkspaceProps) {
                     onChange={(e) => setSortFilterMinViral(Math.max(0, parseFloat(e.target.value) || 0))}
                     className="w-14 px-2 py-1 rounded-lg border border-white/60 text-slate-800 text-sm bg-white/85 outline-none focus:ring-2 focus:ring-slate-200/70"
                   />
-                  <span className="text-slate-500">x</span>
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-slate-600 bg-white/62 border border-white/55 rounded-pill px-3 py-1.5 backdrop-blur-glass shadow-glass-sm">
                   просмотры ≥
@@ -1539,8 +1589,14 @@ export function Workspace(_props?: WorkspaceProps) {
             <div key={reelsGridKey} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5 pb-20 md:pb-6 safe-bottom">
               {feedVideos.map((video, idx) => {
                 const thumbnailUrl = video.preview_url;
-                const viralMult = ((video as any).viral_multiplier ?? null) as number | null;
-                const finalViralCoef = viralMult ?? 0;
+                const viralCoef = calculateViralCoefficient(video.view_count, video.taken_at || video.created_at);
+                
+                // Получаем статистику профиля для расчёта множителя
+                const profileStats = video.owner_username 
+                  ? profileStatsCache.get(video.owner_username.toLowerCase()) 
+                  : null;
+                const viralMult = calculateViralMultiplier(video.view_count || 0, profileStats);
+                const finalViralCoef = applyViralMultiplierToCoefficient(viralCoef, viralMult);
                 
                 // Бейдж папки — всегда показываем (если выбрана папка, показываем её имя)
                 const folderBadge = {
@@ -1871,7 +1927,9 @@ export function Workspace(_props?: WorkspaceProps) {
                 ) : (
                   <div key={carouselsGridKey} className="grid grid-cols-3 gap-3 md:gap-4 pb-20 md:pb-6">
                     {carouselsForFeed.map(c => {
-                      const cViralMult = c.viral_multiplier ?? null;
+                      const cViralCoef = calculateCarouselViralCoefficient(c.like_count, c.taken_at);
+                      const cProfileStats = c.owner_username ? profileStatsCache.get(c.owner_username.toLowerCase()) : null;
+                      const cViralMult = calculateCarouselViralMultiplier(c.like_count, cProfileStats ?? null);
                       const cFolderName = c.folder_id
                         ? (carouselFolderConfigs.find(f => f.id === c.folder_id)?.title || 'Папка')
                         : 'Без папки';
@@ -1904,28 +1962,24 @@ export function Workspace(_props?: WorkspaceProps) {
                               {/* TOP — viral badges слева, описание справа */}
                               <div className="absolute top-1.5 left-1.5 right-1.5 z-[2] flex items-start justify-between gap-1">
                                 <div className="flex flex-col gap-0.5">
-                                  <span
-                                    className={cn(
+                                  {cViralCoef > 0 && (
+                                    <span className={cn(
                                       'px-1.5 py-0.5 rounded-pill flex items-center gap-0.5 border border-white/20',
-                                      cViralMult === null || cViralMult === undefined ? 'bg-black/50 text-white/90' :
-                                      cViralMult >= 10 ? 'bg-accent-negative text-white' :
-                                      cViralMult >= 5 ? 'bg-amber-400/90 text-slate-800' :
-                                      cViralMult >= 3 ? 'bg-accent-positive/85 text-white' :
-                                      cViralMult >= 2 ? 'bg-accent-positive/70 text-white' :
-                                      cViralMult >= 1.5 ? 'bg-accent-positive/60 text-white' :
-                                      'bg-slate-500/80 text-white'
-                                    )}
-                                    title={cViralMult !== null && cViralMult !== undefined
-                                      ? `В ${cViralMult.toFixed(1)}x раз ${cViralMult >= 1 ? 'больше' : 'меньше'} среднего по лайкам у автора`
-                                      : 'Виральность ещё не рассчитана — откройте карусель и нажмите "Полный расчёт"'}
-                                  >
-                                    {cViralMult !== null && cViralMult !== undefined
-                                      ? <TrendingUp className="w-2.5 h-2.5 flex-shrink-0" strokeWidth={2} />
-                                      : <Sparkles className="w-2.5 h-2.5 flex-shrink-0" strokeWidth={2} />}
-                                    <span className="text-[9px] font-semibold tabular-nums">
-                                      {cViralMult !== null && cViralMult !== undefined ? `${cViralMult.toFixed(1)}x` : '—'}
+                                      cViralCoef > 10 ? 'bg-accent-positive text-white' : cViralCoef > 5 ? 'bg-amber-500 text-white' : cViralCoef > 0 ? 'bg-white/90 text-slate-700' : 'bg-black/50 text-white/90'
+                                    )}>
+                                      <Sparkles className="w-2.5 h-2.5 flex-shrink-0" strokeWidth={2} />
+                                      <span className="text-[9px] font-semibold tabular-nums">{Math.round(cViralCoef)}</span>
                                     </span>
-                                  </span>
+                                  )}
+                                  {cViralMult !== null && cViralMult !== undefined && (
+                                    <span className={cn(
+                                      'px-1.5 py-0.5 rounded-pill flex items-center gap-0.5 border border-white/20',
+                                      cViralMult >= 10 ? 'bg-accent-negative text-white' : cViralMult >= 5 ? 'bg-amber-400/80 text-slate-800' : cViralMult >= 3 ? 'bg-accent-positive/80 text-white' : cViralMult >= 2 ? 'bg-accent-positive/70 text-white' : cViralMult >= 1.5 ? 'bg-accent-positive/60 text-white' : 'bg-slate-500/80 text-white'
+                                    )} title={`В ${Math.round(cViralMult)}x раз ${cViralMult >= 1 ? 'больше' : 'меньше'} среднего по лайкам у автора`}>
+                                      <TrendingUp className="w-2.5 h-2.5 flex-shrink-0" strokeWidth={2} />
+                                      <span className="text-[9px] font-semibold tabular-nums">{Math.round(cViralMult)}x</span>
+                                    </span>
+                                  )}
                                 </div>
                                 <button
                                   type="button"

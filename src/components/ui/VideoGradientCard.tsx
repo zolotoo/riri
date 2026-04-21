@@ -92,7 +92,7 @@ export const VideoGradientCard = ({
   likeCount,
   commentCount,
   date,
-  viralCoef: _viralCoef = 0,
+  viralCoef = 0,
   viralMultiplier,
   folderBadge,
   transcriptStatus,
@@ -304,32 +304,40 @@ export const VideoGradientCard = ({
           <div className="absolute top-2 md:top-3 left-2 md:left-3 right-2 md:right-3 flex items-center justify-between gap-1">
             {/* Badges container */}
             <div className="flex items-center gap-1 md:gap-1.5 flex-wrap">
-              {/* Единая виральность = x-множитель относительно среднего по автору. "—" если ещё не рассчитан. */}
+              {/* Viral badge (скрыт для ручных) */}
               {!isManual && (
+              <motion.div
+                className={cn(
+                  "px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 md:gap-1.5",
+                  "border border-white/20",
+                  viralCoef > 10 ? "bg-accent-positive text-white" :
+                  viralCoef > 5 ? "bg-amber-500 text-white" :
+                  viralCoef > 0 ? "bg-white/90 text-slate-700" :
+                  "bg-black/50 text-white/90"
+                )}
+              >
+                <Sparkles className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
+                <span className="text-[10px] md:text-xs font-semibold whitespace-nowrap tabular-nums">{viralCoef > 0 ? Math.round(viralCoef) : '-'}</span>
+              </motion.div>
+              )}
+              
+              {/* Viral multiplier badge (отдельно рядом, скрыт для ручных) */}
+              {!isManual && viralMultiplier !== null && viralMultiplier !== undefined && (
                 <motion.div
                   className={cn(
-                    "px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-1 md:gap-1.5",
+                    "px-1.5 md:px-2 py-0.5 md:py-1 rounded-pill md:backdrop-blur-[20px] md:backdrop-saturate-[180%] flex items-center gap-0.5 md:gap-1",
                     "border border-white/20",
-                    viralMultiplier === null || viralMultiplier === undefined ? "bg-black/50 text-white/90" :
                     viralMultiplier >= 10 ? "bg-accent-negative text-white" :
-                    viralMultiplier >= 5 ? "bg-amber-400/90 text-slate-800" :
-                    viralMultiplier >= 3 ? "bg-accent-positive/85 text-white" :
+                    viralMultiplier >= 5 ? "bg-amber-400/80 text-slate-800" :
+                    viralMultiplier >= 3 ? "bg-accent-positive/80 text-white" :
                     viralMultiplier >= 2 ? "bg-accent-positive/70 text-white" :
                     viralMultiplier >= 1.5 ? "bg-accent-positive/60 text-white" :
                     "bg-slate-500/80 text-white"
                   )}
-                  title={
-                    viralMultiplier !== null && viralMultiplier !== undefined
-                      ? `В ${viralMultiplier.toFixed(1)}x раз ${viralMultiplier >= 1 ? 'больше' : 'меньше'} среднего у автора`
-                      : 'Виральность ещё не рассчитана — откройте видео и нажмите "Полный расчёт"'
-                  }
+                  title={`В ${Math.round(viralMultiplier)}x раз ${viralMultiplier >= 1 ? 'больше' : 'меньше'} среднего у автора`}
                 >
-                  {viralMultiplier !== null && viralMultiplier !== undefined
-                    ? <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
-                    : <Sparkles className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />}
-                  <span className="text-[10px] md:text-xs font-semibold whitespace-nowrap tabular-nums">
-                    {viralMultiplier !== null && viralMultiplier !== undefined ? `${viralMultiplier.toFixed(1)}x` : '—'}
-                  </span>
+                  <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3 flex-shrink-0" strokeWidth={2} />
+                  <span className="text-[9px] md:text-[10px] font-semibold whitespace-nowrap tabular-nums">{Math.round(viralMultiplier)}x</span>
                 </motion.div>
               )}
             </div>
@@ -408,7 +416,7 @@ export const VideoGradientCard = ({
               <span className="text-[9px] md:text-[10px] font-semibold text-white/90 truncate max-w-[100px] md:max-w-[120px]">
                 {isManual ? '✏️ Сценарий' : `@${username || 'instagram'}`}
               </span>
-              {!isManual && typeof viralMultiplier === 'number' && viralMultiplier >= 2 && (
+              {!isManual && viralCoef > 5 && (
                 <div className="w-2.5 h-2.5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
                   <svg className="w-1.5 h-1.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />

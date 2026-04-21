@@ -26,7 +26,7 @@ import type { ProjectTemplateItem, ProjectStyle, DescriptionTemplate } from '../
 import { useVideoComments } from '../hooks/useVideoComments';
 import { useParticipantsForResponsibles } from '../hooks/useParticipantsForResponsibles';
 import { useProjectMembers } from '../hooks/useProjectMembers';
-import { calculateViralMultiplier, getOrUpdateProfileStats, getProfileStats } from '../services/profileStatsService';
+import { calculateViralMultiplier, getOrUpdateProfileStats, applyViralMultiplierToCoefficient } from '../services/profileStatsService';
 import { isRussian } from '../utils/language';
 import { TokenBadge } from './ui/TokenBadge';
 import { getTokenCost } from '../constants/tokenCosts';
@@ -166,6 +166,22 @@ function formatDate(dateValue?: string | number): string {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function calculateViralCoefficient(views?: number, takenAt?: string | number): number {
+  if (!views) return 0;
+  
+  const videoDate = parseDate(takenAt);
+  
+  // Если нет даты - используем 30 дней по умолчанию
+  if (!videoDate || isNaN(videoDate.getTime())) {
+    return Math.round((views / 30 / 1000) * 10) / 10;
+  }
+  
+  const daysOld = Math.max(1, Math.floor((Date.now() - videoDate.getTime()) / (1000 * 60 * 60 * 24)));
+  
+  // K просмотров в день
+  return Math.round((views / daysOld / 1000) * 10) / 10;
+}
+
 export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }: VideoDetailPageProps) {
   const [transcriptTab, setTranscriptTab] = useState<'original' | 'translation'>('original');
   const [transcript, setTranscript] = useState(video.transcript_text || '');
@@ -195,7 +211,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const [videoLoadError, setVideoLoadError] = useState(false);
   const [isSavingScript, setIsSavingScript] = useState(false);
   const [isSavingTranscript, setIsSavingTranscript] = useState(false);
-  const [viralMultiplier, setViralMultiplier] = useState<number | null>((video as any).viral_multiplier ?? null);
+  const [viralMultiplier, setViralMultiplier] = useState<number | null>(null);
   const [isCalculatingViral, setIsCalculatingViral] = useState(false);
   const [profileStats, setProfileStats] = useState<import('../services/profileStatsService').InstagramProfileStats | null>(null);
   const { currentProject, currentProjectId, updateProject, updateProjectStyle, addProjectStyle, refetch: refetchProjects } = useProjectContext();
@@ -466,6 +482,11 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
     else toast.error('Не удалось добавить комментарий');
   };
 
+  const viralCoef = calculateViralCoefficient(video.view_count, video.taken_at);
+  
+  // Применяем множитель к коэффициенту виральности
+  const finalViralCoef = applyViralMultiplierToCoefficient(viralCoef, viralMultiplier);
+  
   // Получить папки из проекта
   const folderConfigs = currentProject?.folders
     ?.slice()
@@ -668,25 +689,21 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
     checkGlobalData();
   }, [video.id, video.url, video.transcript_text, video.translation_text, transcript, translation]);
   
-  // Подгружаем только кешированную статистику профиля (из БД, без RapidAPI).
-  // Парсинг профиля через RapidAPI запускает только кнопка "Полный расчёт виральности".
+  // Загружаем статистику профиля при открытии
   useEffect(() => {
     const loadProfileStats = async () => {
       if (!video.owner_username) return;
-      const stats = await getProfileStats(video.owner_username);
+      
+      const stats = await getOrUpdateProfileStats(video.owner_username, false);
       if (stats) {
+        const mult = calculateViralMultiplier(video.view_count || 0, stats);
+        setViralMultiplier(mult);
         setProfileStats(stats);
-        // Если виральности ещё не было в БД, но статистика профиля уже появилась —
-        // посчитаем локально, чтобы показать значение сразу.
-        if ((video as any).viral_multiplier == null) {
-          const mult = calculateViralMultiplier(video.view_count || 0, stats);
-          if (mult !== null) setViralMultiplier(mult);
-        }
       }
     };
 
     loadProfileStats();
-  }, [video.owner_username, video.view_count, video.id]);
+  }, [video.owner_username, video.view_count]);
   
   // Расчет точной виральности (принудительное обновление статистики)
   const handleCalculateViral = async () => {
@@ -707,12 +724,6 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
         const mult = calculateViralMultiplier(video.view_count || 0, stats);
         setViralMultiplier(mult);
         setProfileStats(stats);
-        // Сохраняем новое значение в БД, чтобы оно отражалось в ленте и сортировке.
-        await supabase
-          .from('saved_videos')
-          .update({ viral_multiplier: mult })
-          .eq('id', video.id);
-        if (onRefreshData) await onRefreshData();
         toast.success('Виральность рассчитана', {
           description: mult ? `В ${mult.toFixed(1)}x раз ${mult >= 1 ? 'больше' : 'меньше'} среднего` : 'Нет данных для сравнения',
         });
@@ -1585,8 +1596,14 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                     <span className="text-sm">Виральность</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {viralMultiplier !== null && viralMultiplier !== undefined ? (
-                      <span
+                    <span className={cn(
+                      "text-sm font-bold",
+                      finalViralCoef > 10 ? "text-emerald-600" : finalViralCoef > 5 ? "text-amber-600" : "text-slate-600"
+                    )}>
+                      {Math.round(finalViralCoef)}K/день
+                    </span>
+                    {viralMultiplier !== null && viralMultiplier !== undefined && (
+                      <span 
                         className={cn(
                           "text-xs px-2 py-0.5 rounded-full font-semibold",
                           viralMultiplier >= 4 ? "bg-red-100 text-red-700" :
@@ -1595,12 +1612,10 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                           viralMultiplier >= 1.5 ? "bg-green-100 text-green-700" :
                           "bg-slate-100 text-slate-600"
                         )}
-                        title={`В ${viralMultiplier.toFixed(1)}x раз ${viralMultiplier >= 1 ? 'больше' : 'меньше'} среднего у автора`}
+                        title={`В ${Math.round(viralMultiplier)}x раз ${viralMultiplier >= 1 ? 'больше' : 'меньше'} среднего у автора`}
                       >
-                        {viralMultiplier.toFixed(1)}x
+                        {Math.round(viralMultiplier)}x
                       </span>
-                    ) : (
-                      <span className="text-sm text-slate-400">—</span>
                     )}
                   </div>
                 </div>
