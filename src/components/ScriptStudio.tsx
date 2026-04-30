@@ -62,7 +62,7 @@ interface Variant {
   source_reference: SourceReference;
 }
 
-type RichKind = 'modes' | 'hooks' | 'options' | 'results';
+type RichKind = 'hooks' | 'options' | 'results';
 
 interface ChatMsg {
   id: string;
@@ -70,6 +70,33 @@ interface ChatMsg {
   text?: string;
   rich?: RichKind;
 }
+
+// ─── Loading lines (мемные, ротация) ─────────────────────────────────────────
+
+const LOADING_LINES = [
+  'Я как Шерлок Холмс — ищу самые залётные рилсы по теме...',
+  'Перебираю тысячу сценариев со всего мира...',
+  'Считаю какая структура сейчас работает в этой нише...',
+  'Подбираю самые сочные хуки от топов...',
+  'Сшиваю всё это в твой голос...',
+  'Ещё пара секунд — почти готово',
+];
+
+// ─── Suggestion chips per step ───────────────────────────────────────────────
+
+const HOOK_SUGGESTIONS = [
+  'про продажи в b2b',
+  'про утренние привычки',
+  'про тренировки дома',
+  'про переезд в Москву',
+  'как я начал зарабатывать',
+];
+const TEXT_SUGGESTIONS = [
+  'хочу рассказать как я перестал прокрастинировать',
+  '3 факта про мой ремонт',
+  'почему мой стартап не взлетел',
+  'один вечер из жизни мамы троих',
+];
 
 // ─── Local UI helpers ────────────────────────────────────────────────────────
 
@@ -110,7 +137,7 @@ function RiriBubble({ text, children }: { text?: string; children?: React.ReactN
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
         }}
       >
-        {text && <p className="text-[15px] text-[#1a1a18] leading-[1.55] whitespace-pre-wrap">{text}</p>}
+        {text && <p className="text-[15px] text-slate-900 leading-[1.55] whitespace-pre-wrap">{text}</p>}
         {children}
       </div>
     </motion.div>
@@ -128,11 +155,11 @@ function UserBubble({ text }: { text: string }) {
       <div
         className="px-3.5 py-2.5 rounded-[18px] rounded-tr-[6px] max-w-[80%]"
         style={{
-          background: '#1a1a18',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          background: '#e9eaf0',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
         }}
       >
-        <p className="text-[15px] text-white/90 leading-[1.55] whitespace-pre-wrap">{text}</p>
+        <p className="text-[15px] text-slate-900 leading-[1.55] whitespace-pre-wrap">{text}</p>
       </div>
     </motion.div>
   );
@@ -187,7 +214,7 @@ function GlassCard({ children, className, onClick }: { children: React.ReactNode
   );
 }
 
-function CostBtn({
+function PrimaryBtn({
   onClick, disabled, loading, cost, children, className,
 }: {
   onClick: () => void;
@@ -202,7 +229,9 @@ function CostBtn({
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(
-        'flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-[#1a1a18] text-white hover:bg-[#1a1a18]/85',
+        'flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-white transition-all',
+        'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed',
+        'shadow-[0_2px_8px_rgba(15,23,42,0.18)]',
         className,
       )}
     >
@@ -212,13 +241,14 @@ function CostBtn({
   );
 }
 
-function Chip({ children, active, onClick }: { children: React.ReactNode; active?: boolean; onClick?: () => void }) {
+function Chip({ children, active, onClick, className }: { children: React.ReactNode; active?: boolean; onClick?: () => void; className?: string }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        'rounded-full px-3 py-1.5 text-xs font-medium transition-all',
-        active ? 'bg-[#1a1a18] text-white' : 'bg-black/5 text-black/70 hover:bg-black/10',
+        'rounded-full px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap',
+        active ? 'bg-slate-900 text-white shadow-[0_2px_8px_rgba(15,23,42,0.15)]' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50',
+        className,
       )}
     >
       {children}
@@ -240,6 +270,44 @@ function extractShortcode(url: string): string | null {
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+const BG = '#f5f6f8';
+
+// ─── Full-screen loader ──────────────────────────────────────────────────────
+
+function FullScreenLoader() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % LOADING_LINES.length), 3200);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center px-8"
+      style={{ background: BG }}
+    >
+      <RiriOrb size={160} floating />
+      <div className="mt-10 h-16 max-w-md w-full">
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={idx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.4 }}
+            className="text-center text-[15px] leading-relaxed text-slate-700"
+          >
+            {LOADING_LINES[idx]}
+          </motion.p>
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function ScriptStudio() {
@@ -249,10 +317,7 @@ export function ScriptStudio() {
 
   const [step, setStep] = useState<Step>('home');
   const [mode, setMode] = useState<Mode | null>(null);
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    { id: 'init-greet', role: 'riri', text: 'Привет! Я RiRi. Помогу тебе собрать вирусный сценарий за минуту. С чего начнём?' },
-    { id: 'init-modes', role: 'rich', rich: 'modes' },
-  ]);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
 
   // Inputs
   const [hookSeed, setHookSeed] = useState('');
@@ -261,7 +326,7 @@ export function ScriptStudio() {
   const [linkTranscript, setLinkTranscript] = useState<string | null>(null);
   const [linkTranscribing, setLinkTranscribing] = useState(false);
 
-  // Hook selection (mode='hook')
+  // Hook selection
   const [hooksList, setHooksList] = useState<AiHook[]>([]);
   const [selectedHook, setSelectedHook] = useState<AiHook | null>(null);
   const [hooksLoading, setHooksLoading] = useState(false);
@@ -285,6 +350,8 @@ export function ScriptStudio() {
     const styles = currentProject?.projectStyles ?? [];
     return styles[0]?.prompt ?? null;
   }, [currentProject]);
+
+  const isWelcome = step === 'home' && messages.length === 0;
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -318,10 +385,7 @@ export function ScriptStudio() {
     setCtaIntent(null);
     setVariants([]);
     setOpenVariantIdx(null);
-    setMessages([
-      { id: 'init-greet', role: 'riri', text: 'Привет! Я RiRi. Помогу тебе собрать вирусный сценарий за минуту. С чего начнём?' },
-      { id: 'init-modes', role: 'rich', rich: 'modes' },
-    ]);
+    setMessages([]);
   }, []);
 
   // ─── Mode selection ───────────────────────────────────────────────────────
@@ -330,33 +394,28 @@ export function ScriptStudio() {
     setMode(m);
     if (m === 'hook') {
       addMsg({ role: 'user', text: 'Подбери мне хук' });
-      addMsg({ role: 'riri', text: 'Окей. Расскажи про что хочешь снять — нишу или идею. Можешь в свободной форме, я всё пойму.' });
+      addMsg({ role: 'riri', text: 'Окей. Расскажи про что хочешь снять — нишу или идею. Можно в свободной форме, я всё пойму.' });
       setStep('mode-hook-input');
     } else if (m === 'link') {
       addMsg({ role: 'user', text: 'Хочу по ссылке на чужой рилс' });
-      addMsg({ role: 'riri', text: `Кидай ссылку на Instagram-рилс. Если он уже у нас в базе (через Радар) — бесплатно, иначе транскрибируем за ${getTokenCost('transcribe_video')} коина.` });
+      addMsg({ role: 'riri', text: `Кинь ссылку на Instagram-рилс. Если он уже у нас в базе — бесплатно, иначе транскрибируем за ${getTokenCost('transcribe_video')} коина.` });
       setStep('mode-link-input');
     } else {
       addMsg({ role: 'user', text: 'У меня есть своя идея' });
-      addMsg({ role: 'riri', text: 'Отлично. Расскажи про что хочешь снять — нишу или идею. Можешь в свободной форме, я всё пойму.' });
+      addMsg({ role: 'riri', text: 'Отлично. Опиши идею — нишу, тему, угол. Можно в свободной форме.' });
       setStep('mode-text-input');
     }
   }, [addMsg]);
 
-  // ─── Mode: hook (подбери хук) ─────────────────────────────────────────────
+  // ─── Mode: hook ───────────────────────────────────────────────────────────
 
   const fetchHooks = useCallback(async () => {
     const seed = hookSeed.trim();
-    if (seed.length < 3) {
-      toast.error('Опиши тему хотя бы парой слов');
-      return;
-    }
+    if (seed.length < 3) { toast.error('Опиши тему хотя бы парой слов'); return; }
     const cost = getTokenCost('ai_hook');
-    if (!canAfford(cost)) {
-      toast.error('Недостаточно коинов');
-      return;
-    }
+    if (!canAfford(cost)) { toast.error('Недостаточно коинов'); return; }
     addMsg({ role: 'user', text: seed });
+    setHookSeed('');
     addMsg({ role: 'typing' });
     setHooksLoading(true);
     try {
@@ -364,21 +423,13 @@ export function ScriptStudio() {
       const res = await fetch('/api/scriptwriter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate-ai-hook',
-          script: seed,
-          min_views: 50000,
-        }),
+        body: JSON.stringify({ action: 'generate-ai-hook', script: seed, min_views: 50000 }),
       });
       const raw = await res.text();
       let data: { success?: boolean; hooks?: AiHook[]; error?: string };
       try { data = JSON.parse(raw); }
       catch { removeTyping(); toast.error('RiRi не смог ответить. Попробуй ещё раз'); return; }
-      if (!data.success) {
-        removeTyping();
-        toast.error(data.error || 'Не удалось подобрать хуки');
-        return;
-      }
+      if (!data.success) { removeTyping(); toast.error(data.error || 'Не удалось подобрать хуки'); return; }
       const hooks: AiHook[] = (data.hooks || []).slice(0, 5);
       if (!hooks.length) {
         replaceTyping({ role: 'riri', text: 'По этой теме хуков пока нет. Попробуй переформулировать или зайди через "По теме".' });
@@ -414,6 +465,7 @@ export function ScriptStudio() {
     if (!code) { toast.error('Не похоже на ссылку Instagram'); return; }
 
     addMsg({ role: 'user', text: url });
+    setLinkUrl('');
     addMsg({ role: 'typing' });
     setHooksLoading(true);
     try {
@@ -427,13 +479,12 @@ export function ScriptStudio() {
       const cached = (data?.translation_text?.trim() || data?.transcript_text?.trim()) ?? '';
       if (cached) {
         setLinkTranscript(cached);
-        replaceTyping({ role: 'riri', text: `Этот рилс уже у нас — взял транскрипт бесплатно. Какая цель концовки?` });
+        replaceTyping({ role: 'riri', text: 'Этот рилс уже у нас — взял транскрипт бесплатно. Какая цель концовки?' });
         addMsg({ role: 'rich', rich: 'options' });
         setStep('options');
         return;
       }
 
-      // Транскрибируем
       const cost = getTokenCost('transcribe_video');
       if (!canAfford(cost)) {
         removeTyping();
@@ -452,11 +503,7 @@ export function ScriptStudio() {
       });
       const td = await res.json();
       const transcript = (td.transcript || td.text || '').trim();
-      if (!transcript) {
-        removeTyping();
-        toast.error(td.error || 'Не удалось транскрибировать видео');
-        return;
-      }
+      if (!transcript) { removeTyping(); toast.error(td.error || 'Не удалось транскрибировать видео'); return; }
       setLinkTranscript(transcript);
       replaceTyping({ role: 'riri', text: 'Готово, разобрал. Какая цель концовки?' });
       addMsg({ role: 'rich', rich: 'options' });
@@ -471,12 +518,13 @@ export function ScriptStudio() {
     }
   }, [linkUrl, canAfford, deduct, addMsg, replaceTyping, removeTyping]);
 
-  // ─── Mode: text idea ──────────────────────────────────────────────────────
+  // ─── Mode: text ───────────────────────────────────────────────────────────
 
   const submitTextIdea = useCallback(() => {
     const idea = textIdea.trim();
     if (idea.length < 5) { toast.error('Опиши идею хоть немного подробнее'); return; }
     addMsg({ role: 'user', text: idea });
+    setTextIdea('');
     addMsg({ role: 'riri', text: 'Принято. Какая цель концовки? Можешь оставить на моё усмотрение.' });
     addMsg({ role: 'rich', rich: 'options' });
     setStep('options');
@@ -488,12 +536,6 @@ export function ScriptStudio() {
     const cost = getTokenCost('sw_full_script');
     if (!canAfford(cost)) { toast.error('Недостаточно коинов'); return; }
 
-    const ctaLabel = ctaIntent === 'save_bait' ? 'на сохранение'
-      : ctaIntent === 'comment_bait' ? 'на комментарий'
-      : ctaIntent === 'profile_visit' ? 'на подписку'
-      : 'на твоё усмотрение';
-    addMsg({ role: 'user', text: `Цель концовки: ${ctaLabel}. Поехали` });
-    addMsg({ role: 'typing' });
     setGenLoading(true);
     setStep('generating');
     try {
@@ -504,7 +546,7 @@ export function ScriptStudio() {
         cta_intent: ctaIntent,
       };
       if (mode === 'hook' && selectedHook) {
-        body.topic = hookSeed.trim();
+        body.topic = hookSeed.trim() || selectedHook.original.slice(0, 100);
         body.hook_text = selectedHook.adapted || selectedHook.original;
       } else if (mode === 'link' && linkTranscript) {
         body.reference_transcript = linkTranscript;
@@ -521,19 +563,14 @@ export function ScriptStudio() {
       let data: { success?: boolean; variants?: Variant[]; error?: string; message?: string };
       try { data = JSON.parse(raw); }
       catch {
-        removeTyping();
-        if (res.status === 504) {
-          addMsg({ role: 'riri', text: 'Не успел уложиться за минуту. Попробуй ещё раз — обычно со второго раза получается.' });
-          addMsg({ role: 'rich', rich: 'options' });
-        } else {
-          addMsg({ role: 'riri', text: 'Что-то сломалось на сервере. Попробуй ещё раз.' });
-          addMsg({ role: 'rich', rich: 'options' });
-        }
+        addMsg({ role: 'riri', text: res.status === 504
+          ? 'Не успел уложиться за минуту. Попробуй ещё раз — обычно со второго раза получается.'
+          : 'Что-то сломалось на сервере. Попробуй ещё раз.' });
+        addMsg({ role: 'rich', rich: 'options' });
         setStep('options');
         return;
       }
       if (!data.success) {
-        removeTyping();
         addMsg({ role: 'riri', text: data.message || data.error || 'Не получилось сгенерировать. Попробуй ещё раз.' });
         addMsg({ role: 'rich', rich: 'options' });
         setStep('options');
@@ -541,25 +578,24 @@ export function ScriptStudio() {
       }
       const vs: Variant[] = Array.isArray(data.variants) ? data.variants : [];
       if (!vs.length) {
-        replaceTyping({ role: 'riri', text: data.message || 'По этой теме пока нет похожих структур в базе. Попробуй другую тему.' });
+        addMsg({ role: 'riri', text: data.message || 'По этой теме пока нет похожих структур в базе. Попробуй другую формулировку.' });
         addMsg({ role: 'rich', rich: 'options' });
         setStep('options');
         return;
       }
       setVariants(vs);
-      replaceTyping({ role: 'riri', text: `Готово, вот ${vs.length} варианта на разных структурах. Тапни любой чтобы открыть полный сценарий и шот-лист.` });
+      addMsg({ role: 'riri', text: `Готово, вот ${vs.length} ${vs.length === 1 ? 'вариант' : vs.length < 5 ? 'варианта' : 'вариантов'} на разных структурах. Тапни любой — увидишь полный сценарий и шот-лист.` });
       addMsg({ role: 'rich', rich: 'results' });
       setStep('results');
     } catch (e) {
       console.error(e);
-      removeTyping();
       addMsg({ role: 'riri', text: 'Ошибка сети. Попробуй ещё раз.' });
       addMsg({ role: 'rich', rich: 'options' });
       setStep('options');
     } finally {
       setGenLoading(false);
     }
-  }, [mode, selectedHook, hookSeed, linkTranscript, textIdea, toneProfile, ctaIntent, canAfford, deduct, addMsg, replaceTyping, removeTyping]);
+  }, [mode, selectedHook, hookSeed, linkTranscript, textIdea, toneProfile, ctaIntent, canAfford, deduct, addMsg]);
 
   const regenerate = useCallback(() => {
     addMsg({ role: 'user', text: 'Дай ещё варианты' });
@@ -591,33 +627,19 @@ export function ScriptStudio() {
     return Boolean(draft);
   }, [mode, hookSeed, selectedHook, linkUrl, textIdea, ctaIntent, createDraft]);
 
+  // ─── Suggestion chips ─────────────────────────────────────────────────────
+
+  const suggestions = step === 'mode-hook-input' ? HOOK_SUGGESTIONS
+    : step === 'mode-text-input' ? TEXT_SUGGESTIONS
+    : null;
+  const onSuggest = (s: string) => {
+    if (step === 'mode-hook-input') setHookSeed(s);
+    else if (step === 'mode-text-input') setTextIdea(s);
+  };
+
   // ─── Render rich blocks ───────────────────────────────────────────────────
 
   const renderRich = useCallback((kind: RichKind) => {
-    if (kind === 'modes') {
-      return (
-        <div className="mt-2 space-y-2 max-w-[88%] pl-9">
-          <ModeCard
-            icon={<Wand2 size={18} />}
-            title="Подобрать хук"
-            desc="Не знаю про что снимать — покажи топ хуки из моей ниши"
-            onClick={() => pickMode('hook')}
-          />
-          <ModeCard
-            icon={<LinkIcon size={18} />}
-            title="По ссылке"
-            desc="Возьми чужой залётный рилс и перепиши под мою тему"
-            onClick={() => pickMode('link')}
-          />
-          <ModeCard
-            icon={<Type size={18} />}
-            title="По теме"
-            desc="У меня уже есть идея, опишу текстом"
-            onClick={() => pickMode('text')}
-          />
-        </div>
-      );
-    }
     if (kind === 'hooks') {
       return (
         <div className="mt-2 space-y-2 max-w-[88%] pl-9">
@@ -625,16 +647,16 @@ export function ScriptStudio() {
             <GlassCard key={i} className="p-3 hover:shadow-md transition-shadow" onClick={() => pickHook(h)}>
               <div className="flex items-start gap-2">
                 <div className="flex-1">
-                  <p className="text-[14px] font-medium leading-snug">{h.adapted || h.original}</p>
+                  <p className="text-[14px] font-medium leading-snug text-slate-900">{h.adapted || h.original}</p>
                   {h.explanation && (
-                    <p className="mt-1.5 text-[12px] text-black/55 leading-relaxed">{h.explanation}</p>
+                    <p className="mt-1.5 text-[12px] text-slate-500 leading-relaxed">{h.explanation}</p>
                   )}
-                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-black/45">
+                  <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-400">
                     {h.views && <span>{h.views} views</span>}
                     {h.owner_username && <span>· @{h.owner_username}</span>}
                   </div>
                 </div>
-                <ChevronRight size={16} className="mt-1 text-black/30" />
+                <ChevronRight size={16} className="mt-1 text-slate-300" />
               </div>
             </GlassCard>
           ))}
@@ -650,9 +672,9 @@ export function ScriptStudio() {
             <Chip active={ctaIntent === 'comment_bait'} onClick={() => setCtaIntent('comment_bait')}>На комментарий</Chip>
             <Chip active={ctaIntent === 'profile_visit'} onClick={() => setCtaIntent('profile_visit')}>На подписку</Chip>
           </div>
-          <CostBtn onClick={generate} cost={getTokenCost('sw_full_script')} loading={genLoading}>
-            Сгенерировать 5 вариантов
-          </CostBtn>
+          <PrimaryBtn onClick={generate} cost={getTokenCost('sw_full_script')} loading={genLoading}>
+            Сгенерировать варианты
+          </PrimaryBtn>
         </div>
       );
     }
@@ -665,14 +687,14 @@ export function ScriptStudio() {
               className="p-3 hover:shadow-md transition-shadow"
               onClick={() => { setOpenVariantIdx(i); setStep('detail'); }}
             >
-              <div className="mb-1 flex items-center gap-2 text-[11px] text-black/50">
-                <span className="rounded-full bg-black/5 px-2 py-0.5 font-medium">~{v.total_seconds}с</span>
-                <span className="rounded-full bg-black/5 px-2 py-0.5">{v.format_type}</span>
+              <div className="mb-1 flex items-center gap-2 text-[11px] text-slate-500">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium">~{v.total_seconds}с</span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5">{v.format_type}</span>
               </div>
-              <p className="text-[14px] font-medium leading-snug line-clamp-2">{v.hook}</p>
-              <p className="mt-1 text-[12px] text-black/50 line-clamp-2">{v.body.slice(0, 110)}...</p>
+              <p className="text-[14px] font-medium leading-snug line-clamp-2 text-slate-900">{v.hook}</p>
+              <p className="mt-1 text-[12px] text-slate-500 line-clamp-2">{v.body.slice(0, 110)}...</p>
               {v.source_reference?.owner_username && (
-                <div className="mt-1.5 text-[11px] text-black/40">
+                <div className="mt-1.5 text-[11px] text-slate-400">
                   на основе @{v.source_reference.owner_username} · {formatViews(v.source_reference.view_count)} views
                 </div>
               )}
@@ -681,7 +703,7 @@ export function ScriptStudio() {
           <button
             onClick={regenerate}
             disabled={genLoading}
-            className="flex items-center gap-1 text-xs text-black/50 hover:text-black/80 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
           >
             <RefreshCcw size={12} /> Дай ещё варианты
           </button>
@@ -689,11 +711,7 @@ export function ScriptStudio() {
       );
     }
     return null;
-  }, [hooksList, variants, ctaIntent, genLoading, pickMode, pickHook, generate, regenerate]);
-
-  // ─── Bottom bar (input depending on step) ─────────────────────────────────
-
-  const showInput = step === 'mode-hook-input' || step === 'mode-link-input' || step === 'mode-text-input';
+  }, [hooksList, variants, ctaIntent, genLoading, pickHook, generate, regenerate]);
 
   // ─── Detail screen (full takeover) ────────────────────────────────────────
 
@@ -707,137 +725,202 @@ export function ScriptStudio() {
     );
   }
 
+  // ─── Bottom input bar (per-step) ──────────────────────────────────────────
+
+  const showInput = step === 'mode-hook-input' || step === 'mode-link-input' || step === 'mode-text-input';
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-screen bg-[#fafaf9]">
+    <div className="relative flex flex-col h-screen" style={{ background: BG }}>
       <style>{`
         @keyframes typingDot {
           0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
           30% { transform: translateY(-4px); opacity: 1; }
         }
+        @keyframes ririOrbFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        .riri-orb-float {
+          animation: ririOrbFloat 3.5s ease-in-out infinite;
+        }
       `}</style>
 
       {/* Header */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-black/5 bg-white/80 backdrop-blur-sm">
-        {step !== 'home' ? (
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-200/60 bg-white/70 backdrop-blur-sm">
+        {!isWelcome && (
           <button
             onClick={goHome}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 hover:bg-black/10 transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 transition-colors"
             aria-label="В начало"
           >
             <ArrowLeft size={18} />
           </button>
-        ) : (
-          <RiriOrb size={32} />
         )}
         <div className="flex-1">
-          <h1 className="text-[15px] font-semibold leading-tight">ИИ-сценарист</h1>
-          <p className="text-[11px] text-black/50">RiRi · отвечает обычно меньше минуты</p>
+          <h1 className="text-[15px] font-semibold leading-tight text-slate-900">ИИ-сценарист</h1>
+          <p className="text-[11px] text-slate-500">RiRi · отвечает обычно меньше минуты</p>
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-        <AnimatePresence initial={false}>
-          {messages.map((m) => {
-            if (m.role === 'riri') return <RiriBubble key={m.id} text={m.text || ''} />;
-            if (m.role === 'user') return <UserBubble key={m.id} text={m.text || ''} />;
-            if (m.role === 'typing') return <TypingIndicator key={m.id} />;
-            if (m.role === 'rich' && m.rich) {
-              return (
-                <motion.div
-                  key={m.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={iosSpringSoft}
-                >
-                  {renderRich(m.rich)}
-                </motion.div>
-              );
-            }
-            return null;
-          })}
-        </AnimatePresence>
-      </div>
+      {/* Welcome state — большой орб + 3 mode cards по центру */}
+      {isWelcome && (
+        <div className="flex-1 overflow-y-auto px-6 py-8">
+          <div className="mx-auto max-w-md flex flex-col items-center text-center">
+            <RiriOrb size={140} floating />
+            <h2 className="mt-8 text-[22px] font-semibold text-slate-900 leading-tight">
+              Привет! Я RiRi
+            </h2>
+            <p className="mt-2 text-[15px] text-slate-600 leading-relaxed max-w-sm">
+              Помогу собрать вирусный сценарий за минуту. С чего начнём?
+            </p>
 
-      {/* Bottom input */}
-      {showInput && (
-        <div className="flex-shrink-0 border-t border-black/5 bg-white/90 backdrop-blur-sm px-4 py-3">
-          {step === 'mode-hook-input' && (
-            <div className="flex items-end gap-2">
-              <textarea
-                value={hookSeed}
-                onChange={(e) => setHookSeed(e.target.value)}
-                placeholder="например: про продажи в b2b, утренние привычки, тренировки дома..."
-                rows={2}
-                className="flex-1 resize-none rounded-2xl border border-black/10 bg-white px-3 py-2 text-[14px] focus:border-black/30 focus:outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !hooksLoading) {
-                    e.preventDefault();
-                    fetchHooks();
-                  }
-                }}
+            <div className="mt-8 w-full space-y-2.5">
+              <ModeCard
+                icon={<Wand2 size={18} />}
+                title="Подобрать хук"
+                desc="Не знаю про что снимать — покажи топ хуки из моей ниши"
+                onClick={() => pickMode('hook')}
               />
-              <CostBtn
-                onClick={fetchHooks}
-                cost={getTokenCost('ai_hook')}
-                loading={hooksLoading}
-                disabled={hookSeed.trim().length < 3}
-              >
-                <Send size={14} />
-              </CostBtn>
-            </div>
-          )}
-
-          {step === 'mode-link-input' && (
-            <div className="flex items-end gap-2">
-              <input
-                type="text"
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://www.instagram.com/reel/..."
-                className="flex-1 rounded-2xl border border-black/10 bg-white px-3 py-2.5 text-[14px] focus:border-black/30 focus:outline-none"
-                disabled={linkTranscribing}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !hooksLoading && !linkTranscribing) {
-                    e.preventDefault();
-                    submitLink();
-                  }
-                }}
+              <ModeCard
+                icon={<LinkIcon size={18} />}
+                title="По ссылке"
+                desc="Возьми чужой залётный рилс и перепиши под мою тему"
+                onClick={() => pickMode('link')}
               />
-              <CostBtn
-                onClick={submitLink}
-                loading={hooksLoading || linkTranscribing}
-                disabled={!linkUrl.trim()}
-              >
-                <Send size={14} />
-              </CostBtn>
-            </div>
-          )}
-
-          {step === 'mode-text-input' && (
-            <div className="flex items-end gap-2">
-              <textarea
-                value={textIdea}
-                onChange={(e) => setTextIdea(e.target.value)}
-                placeholder="например: хочу рассказать как я перестал прокрастинировать, или 3 факта про мой ремонт..."
-                rows={3}
-                className="flex-1 resize-none rounded-2xl border border-black/10 bg-white px-3 py-2 text-[14px] focus:border-black/30 focus:outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    submitTextIdea();
-                  }
-                }}
+              <ModeCard
+                icon={<Type size={18} />}
+                title="По теме"
+                desc="У меня уже есть идея, опишу текстом"
+                onClick={() => pickMode('text')}
               />
-              <CostBtn onClick={submitTextIdea} disabled={textIdea.trim().length < 5}>
-                <Send size={14} />
-              </CostBtn>
             </div>
-          )}
+          </div>
         </div>
       )}
+
+      {/* Chat state — лента сообщений */}
+      {!isWelcome && (
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <AnimatePresence initial={false}>
+            {messages.map((m) => {
+              if (m.role === 'riri') return <RiriBubble key={m.id} text={m.text || ''} />;
+              if (m.role === 'user') return <UserBubble key={m.id} text={m.text || ''} />;
+              if (m.role === 'typing') return <TypingIndicator key={m.id} />;
+              if (m.role === 'rich' && m.rich) {
+                return (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={iosSpringSoft}
+                  >
+                    {renderRich(m.rich)}
+                  </motion.div>
+                );
+              }
+              return null;
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Bottom input — chips + textarea */}
+      {showInput && (
+        <div className="flex-shrink-0 border-t border-slate-200/60 bg-white/80 backdrop-blur-sm">
+          {/* Suggestion chips НАД полем ввода */}
+          {suggestions && suggestions.length > 0 && (
+            <div className="px-3 pt-3 flex gap-2 overflow-x-auto no-scrollbar">
+              {suggestions.map((s) => (
+                <Chip key={s} onClick={() => onSuggest(s)}>
+                  {s}
+                </Chip>
+              ))}
+            </div>
+          )}
+
+          <div className="px-3 py-3">
+            {step === 'mode-hook-input' && (
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={hookSeed}
+                  onChange={(e) => setHookSeed(e.target.value)}
+                  placeholder="например: про продажи в b2b..."
+                  rows={2}
+                  className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[14px] focus:border-slate-400 focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !hooksLoading) {
+                      e.preventDefault();
+                      fetchHooks();
+                    }
+                  }}
+                />
+                <PrimaryBtn
+                  onClick={fetchHooks}
+                  cost={getTokenCost('ai_hook')}
+                  loading={hooksLoading}
+                  disabled={hookSeed.trim().length < 3}
+                >
+                  <Send size={14} />
+                </PrimaryBtn>
+              </div>
+            )}
+
+            {step === 'mode-link-input' && (
+              <div className="flex items-end gap-2">
+                <input
+                  type="text"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://www.instagram.com/reel/..."
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-[14px] focus:border-slate-400 focus:outline-none"
+                  disabled={linkTranscribing}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !hooksLoading && !linkTranscribing) {
+                      e.preventDefault();
+                      submitLink();
+                    }
+                  }}
+                />
+                <PrimaryBtn
+                  onClick={submitLink}
+                  loading={hooksLoading || linkTranscribing}
+                  disabled={!linkUrl.trim()}
+                >
+                  <Send size={14} />
+                </PrimaryBtn>
+              </div>
+            )}
+
+            {step === 'mode-text-input' && (
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={textIdea}
+                  onChange={(e) => setTextIdea(e.target.value)}
+                  placeholder="например: хочу рассказать как я перестал прокрастинировать..."
+                  rows={3}
+                  className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[14px] focus:border-slate-400 focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitTextIdea();
+                    }
+                  }}
+                />
+                <PrimaryBtn onClick={submitTextIdea} disabled={textIdea.trim().length < 5}>
+                  <Send size={14} />
+                </PrimaryBtn>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen лоадер поверх всего */}
+      <AnimatePresence>
+        {step === 'generating' && <FullScreenLoader />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -853,16 +936,16 @@ function ModeCard({
   onClick: () => void;
 }) {
   return (
-    <GlassCard className="p-3 hover:shadow-md transition-shadow" onClick={onClick}>
+    <GlassCard className="p-3 hover:shadow-md transition-shadow text-left" onClick={onClick}>
       <div className="flex items-start gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a1a18] text-white flex-shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white flex-shrink-0">
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-[14px] font-semibold leading-tight">{title}</h3>
-          <p className="mt-0.5 text-[12px] leading-snug text-black/55">{desc}</p>
+          <h3 className="text-[14px] font-semibold leading-tight text-slate-900">{title}</h3>
+          <p className="mt-0.5 text-[12px] leading-snug text-slate-500">{desc}</p>
         </div>
-        <ChevronRight size={16} className="mt-1.5 text-black/30 flex-shrink-0" />
+        <ChevronRight size={16} className="mt-2 text-slate-300 flex-shrink-0" />
       </div>
     </GlassCard>
   );
@@ -892,21 +975,21 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
   }, [saving, saved, onSave]);
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] pb-24">
-      <div className="sticky top-0 z-10 border-b border-black/5 bg-white/85 backdrop-blur-sm">
+    <div className="min-h-screen pb-24" style={{ background: BG }}>
+      <div className="sticky top-0 z-10 border-b border-slate-200/60 bg-white/85 backdrop-blur-sm">
         <div className="mx-auto max-w-2xl flex items-center gap-3 px-4 py-3">
           <button
             onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/5 hover:bg-black/10"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200"
             aria-label="К списку"
           >
             <ArrowLeft size={18} />
           </button>
-          <div className="flex-1 flex flex-wrap items-center gap-2 text-[11px] text-black/50">
-            <span className="rounded-full bg-black/5 px-2 py-0.5 font-medium text-[12px]">~{v.total_seconds}с</span>
-            <span className="rounded-full bg-black/5 px-2 py-0.5">{v.format_type}</span>
+          <div className="flex-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-[12px]">~{v.total_seconds}с</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5">{v.format_type}</span>
             {v.source_reference?.owner_username && (
-              <span className="text-[11px] text-black/40">
+              <span className="text-[11px] text-slate-400">
                 @{v.source_reference.owner_username} · {formatViews(v.source_reference.view_count)}
               </span>
             )}
@@ -916,7 +999,7 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
             disabled={saving || saved}
             className={cn(
               'flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              saved ? 'bg-emerald-100 text-emerald-700' : 'bg-black/5 hover:bg-black/10',
+              saved ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 hover:bg-slate-200 text-slate-700',
             )}
           >
             {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <Check size={12} /> : <Bookmark size={12} />}
@@ -924,7 +1007,7 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
           </button>
           <button
             onClick={copy}
-            className="flex items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-xs font-medium hover:bg-black/10"
+            className="flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 text-xs font-medium"
           >
             <Copy size={12} />
           </button>
@@ -933,33 +1016,33 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
 
       <div className="mx-auto max-w-2xl px-4 py-4 space-y-3">
         <GlassCard className="p-4">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-black/40">Хук</div>
-          <p className="text-[15px] font-medium leading-snug">{v.hook}</p>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Хук</div>
+          <p className="text-[15px] font-medium leading-snug text-slate-900">{v.hook}</p>
         </GlassCard>
 
         <GlassCard className="p-4">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-black/40">Тело</div>
-          <p className="whitespace-pre-line text-[14px] leading-relaxed">{v.body}</p>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Тело</div>
+          <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-800">{v.body}</p>
         </GlassCard>
 
         <GlassCard className="p-4">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-black/40">Концовка</div>
-          <p className="text-[14px] leading-relaxed">{v.ending}</p>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Концовка</div>
+          <p className="text-[14px] leading-relaxed text-slate-800">{v.ending}</p>
         </GlassCard>
 
         {v.shot_list?.length > 0 && (
           <GlassCard className="p-4">
-            <div className="mb-3 text-[11px] uppercase tracking-wide text-black/40">Шот-лист</div>
+            <div className="mb-3 text-[11px] uppercase tracking-wide text-slate-400">Шот-лист</div>
             <div className="space-y-3">
               {v.shot_list.map((s, i) => (
-                <div key={i} className="grid grid-cols-2 gap-3 border-t border-black/5 pt-3 first:border-t-0 first:pt-0">
+                <div key={i} className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
                   <div>
-                    <div className="mb-1 text-[10px] uppercase tracking-wide text-black/40">{s.section} · речь</div>
-                    <p className="text-[13px] leading-snug">{s.speech}</p>
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">{s.section} · речь</div>
+                    <p className="text-[13px] leading-snug text-slate-900">{s.speech}</p>
                   </div>
                   <div>
-                    <div className="mb-1 text-[10px] uppercase tracking-wide text-black/40">в кадре</div>
-                    <p className="text-[13px] leading-snug text-black/70">{s.on_screen}</p>
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">в кадре</div>
+                    <p className="text-[13px] leading-snug text-slate-600">{s.on_screen}</p>
                   </div>
                 </div>
               ))}
