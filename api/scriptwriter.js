@@ -324,7 +324,7 @@ function parseJsonResponse(rawText) {
 }
 
 async function callWithFallback(models, messages, opts = {}) {
-  const { temperature = 0.2, response_format } = opts;
+  const { temperature = 0.2, response_format, max_tokens } = opts;
   let rawText = null;
   for (const model of models) {
     try {
@@ -333,6 +333,7 @@ async function callWithFallback(models, messages, opts = {}) {
         model,
         messages,
         temperature,
+        ...(max_tokens != null && { max_tokens }),
         ...(response_format && { response_format }),
       });
       rawText = result.text;
@@ -2108,14 +2109,17 @@ ${ctaSection}
 }`;
 
   try {
-    const { text: rawText } = await callOpenRouter({
-      apiKey: OPENROUTER_API_KEY,
-      model: MODELS.CLAUDE_SONNET_35,
-      messages: [{ role: 'user', content: userPrompt }],
-      temperature: 0.7,
-      max_tokens: 3500,
-      response_format: { type: 'json_object' },
-    });
+    // Gemini Pro 2.5 c fallback на Flash — как в большинстве других actions проекта.
+    // Дешевле Sonnet ×5-10, быстрее, и доказано работает с длинными JSON-структурами.
+    const rawText = await callWithFallback(
+      [MODELS.PRO_3, MODELS.FLASH],
+      [{ role: 'user', content: userPrompt }],
+      {
+        temperature: 0.7,
+        max_tokens: 3500,
+        response_format: { type: 'json_object' },
+      },
+    );
     if (!rawText) return res.status(502).json({ error: 'Empty response' });
     const parsed = parseJsonResponse(rawText);
 
