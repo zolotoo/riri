@@ -72,10 +72,10 @@ CREATE INDEX IF NOT EXISTS idx_video_skeletons_embedding_hnsw
   ON video_skeletons
   USING hnsw (embedding vector_cosine_ops);
 
--- Один скелет на одно видео (idempotency для backfill)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_video_skeletons_video_id_unique
-  ON video_skeletons(video_id)
-  WHERE video_id IS NOT NULL;
+-- Один скелет на одно видео (idempotency для backfill).
+-- Используем CONSTRAINT, а не partial unique index, чтобы работал ON CONFLICT в UPSERT.
+ALTER TABLE video_skeletons
+  ADD CONSTRAINT video_skeletons_video_id_key UNIQUE (video_id);
 
 -- Триггер обновления updated_at
 CREATE OR REPLACE FUNCTION update_video_skeletons_updated_at()
