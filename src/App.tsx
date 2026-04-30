@@ -672,7 +672,12 @@ function AppContent() {
                   onClick={() => setViewMode('competitor')}
                   isActive={viewMode === 'competitor'}
                 />
-                {/* ИИ-сценарист скрыт — функция перенесена в окно работы с видео */}
+                <SidebarLink
+                  icon={<Sparkles className="w-4 h-4" strokeWidth={2.5} />}
+                  label="ИИ-сценарист"
+                  onClick={() => setViewMode('scriptwriter')}
+                  isActive={viewMode === 'scriptwriter'}
+                />
                 <SidebarLink
                   icon={<ImageIcon className="w-4 h-4" strokeWidth={2.5} />}
                   label="ИИ-Карусели"
