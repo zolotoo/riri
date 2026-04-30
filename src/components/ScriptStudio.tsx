@@ -415,7 +415,6 @@ export function ScriptStudio() {
     const cost = getTokenCost('ai_hook');
     if (!canAfford(cost)) { toast.error('Недостаточно коинов'); return; }
     addMsg({ role: 'user', text: seed });
-    setHookSeed('');
     addMsg({ role: 'typing' });
     setHooksLoading(true);
     try {
@@ -465,7 +464,6 @@ export function ScriptStudio() {
     if (!code) { toast.error('Не похоже на ссылку Instagram'); return; }
 
     addMsg({ role: 'user', text: url });
-    setLinkUrl('');
     addMsg({ role: 'typing' });
     setHooksLoading(true);
     try {
@@ -524,8 +522,26 @@ export function ScriptStudio() {
     const idea = textIdea.trim();
     if (idea.length < 5) { toast.error('Опиши идею хоть немного подробнее'); return; }
     addMsg({ role: 'user', text: idea });
-    setTextIdea('');
     addMsg({ role: 'riri', text: 'Принято. Какая цель концовки? Можешь оставить на моё усмотрение.' });
+    addMsg({ role: 'rich', rich: 'options' });
+    setStep('options');
+  }, [textIdea, addMsg]);
+
+  // Универсальный submit с любого шага — продолжение разговора как новая тема.
+  // Сбрасывает старый mode-context и стартует свежий text-mode flow с этой темой.
+  const submitFromAny = useCallback(() => {
+    const idea = textIdea.trim();
+    if (idea.length < 5) { toast.error('Опиши идею хоть немного подробнее'); return; }
+    setMode('text');
+    setSelectedHook(null);
+    setLinkTranscript(null);
+    setHooksList([]);
+    setVariants([]);
+    setOpenVariantIdx(null);
+    setHookSeed('');
+    setLinkUrl('');
+    addMsg({ role: 'user', text: idea });
+    addMsg({ role: 'riri', text: 'Принято — новая тема. Какая цель концовки?' });
     addMsg({ role: 'rich', rich: 'options' });
     setStep('options');
   }, [textIdea, addMsg]);
@@ -725,9 +741,10 @@ export function ScriptStudio() {
     );
   }
 
-  // ─── Bottom input bar (per-step) ──────────────────────────────────────────
+  // ─── Bottom input bar — виден всегда в chat-state (не welcome, не detail) ─
 
-  const showInput = step === 'mode-hook-input' || step === 'mode-link-input' || step === 'mode-text-input';
+  const showInput = !isWelcome && step !== 'detail' && step !== 'generating';
+  const isFreeFormStep = step === 'mode-hook-pick' || step === 'options' || step === 'results';
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -909,6 +926,29 @@ export function ScriptStudio() {
                   }}
                 />
                 <PrimaryBtn onClick={submitTextIdea} disabled={textIdea.trim().length < 5}>
+                  <Send size={14} />
+                </PrimaryBtn>
+              </div>
+            )}
+
+            {/* На "не-input" шагах (выбор хука / опции / результаты) показываем
+                то же поле ввода — submit запускает новый text-mode flow */}
+            {isFreeFormStep && (
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={textIdea}
+                  onChange={(e) => setTextIdea(e.target.value)}
+                  placeholder="напиши новую тему — начнём заново..."
+                  rows={2}
+                  className="flex-1 resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[14px] focus:border-slate-400 focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitFromAny();
+                    }
+                  }}
+                />
+                <PrimaryBtn onClick={submitFromAny} disabled={textIdea.trim().length < 5}>
                   <Send size={14} />
                 </PrimaryBtn>
               </div>
