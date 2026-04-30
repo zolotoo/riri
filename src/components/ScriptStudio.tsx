@@ -27,7 +27,6 @@ type Step =
 
 type Mode = 'hook' | 'link' | 'text';
 
-type LengthPreference = 15 | 30 | 60 | null;
 type CtaIntent = 'soft_loop' | 'save_bait' | 'comment_bait' | 'profile_visit' | null;
 
 interface AiHook {
@@ -144,7 +143,6 @@ export function ScriptStudio() {
   const [hooksLoading, setHooksLoading] = useState(false);
 
   // Options
-  const [lengthPref, setLengthPref] = useState<LengthPreference>(null);
   const [ctaIntent, setCtaIntent] = useState<CtaIntent>(null);
 
   // Generation
@@ -170,7 +168,6 @@ export function ScriptStudio() {
     setTextIdea('');
     setHooksList([]);
     setSelectedHook(null);
-    setLengthPref(null);
     setCtaIntent(null);
     setVariants([]);
     setOpenVariantIdx(null);
@@ -314,7 +311,6 @@ export function ScriptStudio() {
       const body: Record<string, unknown> = {
         action: 'generate-full-script',
         tone_profile: toneProfile,
-        length_preference: lengthPref,
         cta_intent: ctaIntent,
       };
       if (mode === 'hook' && selectedHook) {
@@ -331,7 +327,20 @@ export function ScriptStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      // Vercel может вернуть HTML на 504/502 — пробуем JSON, иначе понятная ошибка.
+      const raw = await res.text();
+      let data: { success?: boolean; variants?: Variant[]; error?: string; message?: string };
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        if (res.status === 504) {
+          toast.error('RiRi не успел ответить за минуту. Попробуй ещё раз — обычно со второго раза получается.');
+        } else {
+          toast.error('Что-то пошло не так на сервере. Попробуй ещё раз.');
+        }
+        setStep('options');
+        return;
+      }
       if (!data.success) {
         toast.error(data.message || data.error || 'Не удалось сгенерировать');
         setStep('options');
@@ -339,7 +348,7 @@ export function ScriptStudio() {
       }
       const vs: Variant[] = Array.isArray(data.variants) ? data.variants : [];
       if (!vs.length) {
-        toast.info(data.message || 'Не нашлось похожих скелетов');
+        toast.info(data.message || 'По этой теме пока не нашлось похожих структур');
         setStep('options');
         return;
       }
@@ -347,12 +356,12 @@ export function ScriptStudio() {
       setStep('results');
     } catch (e) {
       console.error(e);
-      toast.error('Ошибка генерации');
+      toast.error('Ошибка генерации, попробуй ещё раз');
       setStep('options');
     } finally {
       setGenLoading(false);
     }
-  }, [mode, selectedHook, hookSeed, linkTranscript, textIdea, toneProfile, lengthPref, ctaIntent, canAfford, deduct]);
+  }, [mode, selectedHook, hookSeed, linkTranscript, textIdea, toneProfile, ctaIntent, canAfford, deduct]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -387,25 +396,25 @@ export function ScriptStudio() {
               className="space-y-3"
             >
               <p className="px-2 pb-2 text-sm text-black/60">
-                Как поедем? Выбери с чего начать — Реми сам подберёт скелет вирусного видео и адаптирует под тебя.
+                С чего начнём? Выбери удобный путь — RiRi подберёт виральную структуру и адаптирует под твой голос.
               </p>
 
               <ModeCard
                 icon={<Wand2 size={20} />}
                 title="Подобрать хук"
-                desc="Не знаю про что снимать. Покажи 5 хуков из топа в моей теме — выберу один и развернём в сценарий."
+                desc="Если ещё не знаешь про что снимать — RiRi покажет 5 крутых хуков из топа в твоей теме, выберешь и развернём в сценарий."
                 onClick={() => { setMode('hook'); setStep('mode-hook'); }}
               />
               <ModeCard
                 icon={<LinkIcon size={20} />}
                 title="По ссылке"
-                desc="Кину ссылку на чужой залётный рилс — Реми разберёт его структуру и перепишет под мою тему."
+                desc="Кинь ссылку на чужой залётный рилс — RiRi разберёт его структуру и перепишет под твою тему."
                 onClick={() => { setMode('link'); setStep('mode-link'); }}
               />
               <ModeCard
                 icon={<Type size={20} />}
                 title="По теме"
-                desc="У меня в голове идея — текстом опишу, Реми соберёт 5 вариантов сценария по разным структурам."
+                desc="Опиши свою идею — RiRi соберёт 5 вариантов сценария по разным виральным структурам."
                 onClick={() => { setMode('text'); setStep('mode-text'); }}
               />
             </motion.div>
@@ -421,11 +430,11 @@ export function ScriptStudio() {
               className="space-y-4"
             >
               <GlassCard className="p-4">
-                <label className="mb-2 block text-sm font-medium">О чём хочешь снять? Пара слов или предложение</label>
+                <label className="mb-2 block text-sm font-medium">Про что хочешь снять? Нишу или идею — пиши в свободной форме, я всё пойму</label>
                 <textarea
                   value={hookSeed}
                   onChange={(e) => setHookSeed(e.target.value)}
-                  placeholder="например: про продажи в b2b, или про утренние привычки, или про тренировки дома"
+                  placeholder="например: про продажи в b2b, утренние привычки, тренировки дома..."
                   rows={3}
                   className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm focus:border-black/30 focus:outline-none"
                 />
@@ -522,11 +531,11 @@ export function ScriptStudio() {
               className="space-y-4"
             >
               <GlassCard className="p-4">
-                <label className="mb-2 block text-sm font-medium">Идея сценария</label>
+                <label className="mb-2 block text-sm font-medium">Про что хочешь снять? Нишу или идею — пиши в свободной форме, я всё пойму</label>
                 <textarea
                   value={textIdea}
                   onChange={(e) => setTextIdea(e.target.value)}
-                  placeholder="опиши: про что хочешь снять, что главное хочешь донести, какой угол"
+                  placeholder="например: хочу рассказать как я перестал прокрастинировать, или 3 факта про мой ремонт, или почему мой стартап не взлетел..."
                   rows={5}
                   className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-sm focus:border-black/30 focus:outline-none"
                 />
@@ -562,30 +571,14 @@ export function ScriptStudio() {
                 )}
               </GlassCard>
 
-              {/* Длина (опц) */}
-              <GlassCard className="p-4">
-                <div className="mb-3 text-sm font-medium">Длина (опционально)</div>
-                <div className="flex flex-wrap gap-2">
-                  {([null, 15, 30, 60] as LengthPreference[]).map((v) => (
-                    <Chip key={String(v)} active={lengthPref === v} onClick={() => setLengthPref(v)}>
-                      {v == null ? 'Авто' : `~${v}с`}
-                    </Chip>
-                  ))}
-                </div>
-                <p className="mt-2 text-xs text-black/50">
-                  Авто — Реми предложит варианты разной длины из похожих вирусных видео.
-                </p>
-              </GlassCard>
-
               {/* CTA intent (опц) */}
               <GlassCard className="p-4">
                 <div className="mb-3 text-sm font-medium">Цель концовки (опционально)</div>
                 <div className="flex flex-wrap gap-2">
                   <Chip active={ctaIntent === null} onClick={() => setCtaIntent(null)}>Авто</Chip>
-                  <Chip active={ctaIntent === 'soft_loop'} onClick={() => setCtaIntent('soft_loop')}>Возврат к хуку</Chip>
                   <Chip active={ctaIntent === 'save_bait'} onClick={() => setCtaIntent('save_bait')}>На сохранение</Chip>
-                  <Chip active={ctaIntent === 'comment_bait'} onClick={() => setCtaIntent('comment_bait')}>На коммент</Chip>
-                  <Chip active={ctaIntent === 'profile_visit'} onClick={() => setCtaIntent('profile_visit')}>В профиль</Chip>
+                  <Chip active={ctaIntent === 'comment_bait'} onClick={() => setCtaIntent('comment_bait')}>На комментарий</Chip>
+                  <Chip active={ctaIntent === 'profile_visit'} onClick={() => setCtaIntent('profile_visit')}>На подписку</Chip>
                 </div>
               </GlassCard>
 
@@ -602,10 +595,12 @@ export function ScriptStudio() {
               key="generating"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center gap-4 py-24"
+              className="flex flex-col items-center justify-center gap-4 py-24 px-4"
             >
               <Loader2 size={32} className="animate-spin text-black/40" />
-              <p className="text-sm text-black/60">Реми подбирает скелеты и пишет 5 вариантов...</p>
+              <p className="max-w-sm text-center text-sm leading-relaxed text-black/60">
+                RiRi анализирует тысячу сценариев со всего мира, чтобы понять какая структура и идея сейчас будет наиболее актуальной...
+              </p>
             </motion.div>
           )}
 

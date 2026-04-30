@@ -1962,7 +1962,7 @@ async function handleGenerateFullScript(req, res) {
   else if (length_preference === 30) { minSeconds = 20; maxSeconds = 40; }
   else if (length_preference === 60) { minSeconds = 40; maxSeconds = 90; }
 
-  // 3. Параллельно retrieval всех 4 слоёв: скелеты (структура) + хуки/тела/концовки (тексты)
+  // 3. Параллельно retrieval всех 4 слоёв (5 скелетов + по 3 inspiration текста)
   const [skeletons, hooks, bodies, ctas] = await Promise.all([
     matchSkeletons(embedding, {
       niche,
@@ -1974,17 +1974,17 @@ async function handleGenerateFullScript(req, res) {
     matchViralHooks(embedding, {
       niche,
       minViews: min_views,
-      limit: 5,
+      limit: 3,
     }),
     matchViralParts(embedding, 'body', {
       niche,
       minViews: min_views,
-      limit: 5,
+      limit: 3,
     }),
     matchViralParts(embedding, 'cta', {
       niche,
       minViews: min_views,
-      limit: 5,
+      limit: 3,
     }),
   ]);
 
@@ -2018,7 +2018,7 @@ async function handleGenerateFullScript(req, res) {
     : 'Дополнительных хуков по теме не найдено.';
 
   const bodiesText = bodies?.length
-    ? bodies.map((b, i) => `${i + 1}. [${formatViews(b.view_count || 0)} | @${b.owner_username || '?'}] ${(b.content || '').slice(0, 600)}`).join('\n\n')
+    ? bodies.map((b, i) => `${i + 1}. [${formatViews(b.view_count || 0)}] ${(b.content || '').slice(0, 280)}`).join('\n')
     : 'Тел виральных видео по теме не найдено.';
 
   const ctasText = ctas?.length
@@ -2113,7 +2113,7 @@ ${ctaSection}
       model: MODELS.CLAUDE_SONNET_35,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.7,
-      max_tokens: 6000,
+      max_tokens: 3500,
       response_format: { type: 'json_object' },
     });
     if (!rawText) return res.status(502).json({ error: 'Empty response' });
