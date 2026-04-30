@@ -2,10 +2,11 @@ import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, ArrowLeft, Loader2, Link as LinkIcon,
-  Type, Wand2, ChevronRight, Eye, RefreshCcw, Copy,
+  Type, Wand2, ChevronRight, Eye, RefreshCcw, Copy, Bookmark, Check,
 } from 'lucide-react';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
+import { useScriptDrafts } from '../hooks/useScriptDrafts';
 import { getTokenCost } from '../constants/tokenCosts';
 import { TokenBadge } from './ui/TokenBadge';
 import { cn } from '../utils/cn';
@@ -126,6 +127,7 @@ function extractShortcode(url: string): string | null {
 export function ScriptStudio() {
   const { currentProject } = useProjectContext();
   const { canAfford, deduct } = useTokenBalance();
+  const { createDraft } = useScriptDrafts();
 
   const [step, setStep] = useState<Step>('home');
   const [mode, setMode] = useState<Mode | null>(null);
@@ -236,6 +238,8 @@ export function ScriptStudio() {
 
   // ─── Mode: link (по ссылке на чужой рилс) ─────────────────────────────────
 
+  const [linkTranscribing, setLinkTranscribing] = useState(false);
+
   const submitLink = useCallback(async () => {
     const url = linkUrl.trim();
     if (!url) {
@@ -249,7 +253,7 @@ export function ScriptStudio() {
     }
     setHooksLoading(true);
     try {
-      // ищем видео в нашей базе по shortcode
+      // 1. Сперва ищем в нашей базе по shortcode — если уже распарсено, бесплатно
       const { supabase } = await import('../utils/supabase');
       const { data, error } = await supabase
         .from('videos')
@@ -257,20 +261,43 @@ export function ScriptStudio() {
         .eq('shortcode', code)
         .maybeSingle();
       if (error) throw error;
-      const t = (data?.translation_text?.trim() || data?.transcript_text?.trim()) ?? '';
-      if (!t) {
-        toast.error('Этого рилса пока нет в нашей базе. Полная транскрибация по ссылке будет в следующей версии — а пока попробуй вставить уже проанализированный ролик из Радара.');
+      const cached = (data?.translation_text?.trim() || data?.transcript_text?.trim()) ?? '';
+      if (cached) {
+        setLinkTranscript(cached);
+        setStep('options');
         return;
       }
-      setLinkTranscript(t);
+
+      // 2. В базе нет — транскрибируем через /api/transcribe со списанием коинов
+      const cost = getTokenCost('transcribe_video');
+      if (!canAfford(cost)) {
+        toast.error(`Недостаточно коинов (нужно ${cost} на транскрибацию)`);
+        return;
+      }
+      setHooksLoading(false);
+      setLinkTranscribing(true);
+      await deduct(cost, { action: 'transcribe_video', section: 'script-studio', label: 'Транскрибировать референс' });
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const td = await res.json();
+      const transcript = (td.transcript || td.text || '').trim();
+      if (!transcript) {
+        toast.error(td.error || 'Не удалось транскрибировать видео');
+        return;
+      }
+      setLinkTranscript(transcript);
       setStep('options');
     } catch (e) {
       console.error(e);
       toast.error('Не удалось загрузить ссылку');
     } finally {
       setHooksLoading(false);
+      setLinkTranscribing(false);
     }
-  }, [linkUrl]);
+  }, [linkUrl, canAfford, deduct]);
 
   // ─── Generate full script ─────────────────────────────────────────────────
 
@@ -460,12 +487,24 @@ export function ScriptStudio() {
                   onChange={(e) => setLinkUrl(e.target.value)}
                   placeholder="https://www.instagram.com/reel/..."
                   className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm focus:border-black/30 focus:outline-none"
+                  disabled={linkTranscribing}
                 />
                 <p className="mt-2 text-xs text-black/50">
-                  Сейчас работает с рилсами, которые уже в нашей базе (например, разобранные через Радар). Полный приём любой ссылки добавим в следующей версии.
+                  Если рилс уже в нашей базе (через Радар) — бесплатно. Если нет — транскрибируем сами за {getTokenCost('transcribe_video')} коина.
                 </p>
+                {linkTranscribing && (
+                  <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/5 px-3 py-2 text-xs text-black/70">
+                    <Loader2 size={14} className="animate-spin" />
+                    Транскрибируем рилс... обычно 20-60 секунд
+                  </div>
+                )}
                 <div className="mt-3 flex justify-end">
-                  <CostBtn onClick={submitLink} loading={hooksLoading} disabled={!linkUrl.trim()}>
+                  <CostBtn
+                    onClick={submitLink}
+                    loading={hooksLoading || linkTranscribing}
+                    disabled={!linkUrl.trim()}
+                    cost={getTokenCost('transcribe_video')}
+                  >
                     Дальше
                   </CostBtn>
                 </div>
@@ -619,6 +658,31 @@ export function ScriptStudio() {
             <VariantDetail
               v={variants[openVariantIdx]}
               onBack={() => setStep('results')}
+              onSave={async () => {
+                const v = variants[openVariantIdx];
+                const fullText = `${v.hook}\n\n${v.body}\n\n${v.ending}`;
+                const titleSeed = (v.hook || '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'ИИ-сценарий';
+                const sourceType: 'topic' | 'reference' = mode === 'link' ? 'reference' : 'topic';
+                const sourceData = {
+                  mode,
+                  hookSeed: mode === 'hook' ? hookSeed : undefined,
+                  selectedHook: mode === 'hook' ? selectedHook : undefined,
+                  linkUrl: mode === 'link' ? linkUrl : undefined,
+                  textIdea: mode === 'text' ? textIdea : undefined,
+                  lengthPref,
+                  ctaIntent,
+                  variant: v,
+                };
+                const draft = await createDraft({
+                  title: titleSeed,
+                  script_text: fullText,
+                  source_type: sourceType,
+                  source_data: sourceData,
+                });
+                if (draft) toast.success('Сохранено в черновики');
+                else toast.error('Не получилось сохранить');
+                return Boolean(draft);
+              }}
             />
           )}
         </AnimatePresence>
@@ -673,8 +737,10 @@ function Chip({
   );
 }
 
-function VariantDetail({ v, onBack }: { v: Variant; onBack: () => void }) {
+function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; onSave: () => Promise<boolean> }) {
   const fullText = `${v.hook}\n\n${v.body}\n\n${v.ending}`;
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const copy = useCallback(() => {
     navigator.clipboard.writeText(fullText).then(
@@ -682,6 +748,17 @@ function VariantDetail({ v, onBack }: { v: Variant; onBack: () => void }) {
       () => toast.error('Не получилось скопировать'),
     );
   }, [fullText]);
+
+  const save = useCallback(async () => {
+    if (saving || saved) return;
+    setSaving(true);
+    try {
+      const ok = await onSave();
+      if (ok) setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, saved, onSave]);
 
   return (
     <motion.div
@@ -701,8 +778,19 @@ function VariantDetail({ v, onBack }: { v: Variant; onBack: () => void }) {
           </span>
         )}
         <button
+          onClick={save}
+          disabled={saving || saved}
+          className={cn(
+            'ml-auto flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+            saved ? 'bg-emerald-100 text-emerald-700' : 'bg-black/5 hover:bg-black/10',
+          )}
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : saved ? <Check size={12} /> : <Bookmark size={12} />}
+          {saved ? 'В черновиках' : saving ? 'Сохраняю' : 'В черновик'}
+        </button>
+        <button
           onClick={copy}
-          className="ml-auto flex items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-xs font-medium hover:bg-black/10"
+          className="flex items-center gap-1 rounded-full bg-black/5 px-3 py-1.5 text-xs font-medium hover:bg-black/10"
         >
           <Copy size={12} /> Скопировать
         </button>
