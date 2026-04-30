@@ -4,8 +4,9 @@
     {
       "name": "Vite Dev Server",
       "runtimeExecutable": "/bin/zsh",
-      "runtimeArgs": ["-c", "PATH=/opt/homebrew/bin:$PATH npm run dev"],
-      "port": 3000
+      "runtimeArgs": ["-c", "PATH=/opt/homebrew/bin:$PATH npm run dev -- --port $PORT --strictPort"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

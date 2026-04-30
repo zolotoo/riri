@@ -7,6 +7,7 @@ import { RiriChatPage } from './components/RiriChatPage';
 import { OnboardingModal } from './components/OnboardingModal';
 import { History } from './components/History';
 import { AIScriptwriter } from './components/AIScriptwriter';
+import { ScriptStudio } from './components/ScriptStudio';
 import { CompetitorAnalysisPage } from './components/CompetitorAnalysis';
 import { RadarPage } from './components/RadarPage';
 import { ProfilePage } from './components/ProfilePage';
@@ -811,7 +812,7 @@ function AppContent() {
           >
             {viewMode === 'dashboard' && <RiriChatPage />}
             {viewMode === 'workspace' && <Workspace />}
-            {viewMode === 'scriptwriter' && <AIScriptwriter />}
+            {viewMode === 'scriptwriter' && <ScriptStudio />}
             {viewMode === 'radar' && <RadarPage />}
             {viewMode === 'analytics' && <Analytics />}
             {viewMode === 'history' && <History />}
