@@ -2130,7 +2130,8 @@ ${videosBlock}
     if (!rawText) return res.status(502).json({ error: 'Empty response' });
     const parsed = parseJsonResponse(rawText);
 
-    // Дополняем source_reference из retrieved-видео (если AI не вернул)
+    // Дополняем source_reference + original тексты из retrieved-видео
+    // (юзер сможет в UI сравнить переписанный сценарий с тем, что было в вирусе)
     const variants = Array.isArray(parsed.variants) ? parsed.variants.map((v) => {
       const idx = Number(v.skeleton_index);
       const orig = idx >= 1 && idx <= fullVideos.length ? fullVideos[idx - 1] : null;
@@ -2144,6 +2145,11 @@ ${videosBlock}
           view_count: ref.view_count || orig.view_count || null,
           url: ref.url || orig.url || null,
         } : ref,
+        original: orig ? {
+          hook: orig.hook_text || null,
+          body: orig.body_text || null,
+          ending: orig.cta_text || null,
+        } : null,
       };
     }) : [];
 

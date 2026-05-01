@@ -51,6 +51,12 @@ interface SourceReference {
   url?: string | null;
 }
 
+interface OriginalScript {
+  hook: string | null;
+  body: string | null;
+  ending: string | null;
+}
+
 interface Variant {
   skeleton_index: number;
   total_seconds: number;
@@ -60,6 +66,7 @@ interface Variant {
   ending: string;
   shot_list: ShotListItem[];
   source_reference: SourceReference;
+  original?: OriginalScript | null;
 }
 
 type RichKind = 'hooks' | 'options' | 'results';
@@ -1101,7 +1108,79 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
             </div>
           </GlassCard>
         )}
+
+        {/* Что было в оригинале — для сравнения */}
+        {v.original && (v.original.hook || v.original.body || v.original.ending) && (
+          <OriginalCard original={v.original} src={v.source_reference} />
+        )}
       </div>
     </div>
+  );
+}
+
+function OriginalCard({ original, src }: { original: OriginalScript; src: SourceReference }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <GlassCard className="p-4 border-emerald-100" onClick={() => setOpen((o) => !o)}>
+      <div className="flex items-center justify-between cursor-pointer">
+        <div>
+          <div className="mb-0.5 text-[11px] uppercase tracking-wide text-emerald-600">
+            Оригинал из вирала
+          </div>
+          <div className="text-[13px] text-slate-700">
+            @{src.owner_username || '?'} · {src.view_count != null ? formatViews(src.view_count) : ''} views
+            <span className="text-slate-400 ml-2">{open ? 'скрыть' : 'показать транскрипт'}</span>
+          </div>
+        </div>
+        <ChevronRight
+          size={18}
+          className={cn('text-slate-400 transition-transform', open && 'rotate-90')}
+        />
+      </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+              {original.hook && (
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">оригинальный хук</div>
+                  <p className="text-[13px] leading-snug text-slate-700 whitespace-pre-line">{original.hook}</p>
+                </div>
+              )}
+              {original.body && (
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">оригинальное тело</div>
+                  <p className="text-[13px] leading-relaxed text-slate-700 whitespace-pre-line">{original.body}</p>
+                </div>
+              )}
+              {original.ending && (
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">оригинальная концовка</div>
+                  <p className="text-[13px] leading-snug text-slate-700 whitespace-pre-line">{original.ending}</p>
+                </div>
+              )}
+              {src.url && (
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 text-[12px] text-emerald-700 hover:text-emerald-900"
+                >
+                  <LinkIcon size={12} /> Открыть оригинал в Instagram
+                </a>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </GlassCard>
   );
 }
