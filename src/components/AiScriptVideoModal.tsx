@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Loader2, ArrowLeft, Copy, Bookmark, Check, ChevronRight,
@@ -201,20 +202,22 @@ function LoadingState() {
 // ─── Main modal ──────────────────────────────────────────────────────────────
 
 interface Props {
-  isOpen: boolean;
+  // Якорь от кнопки-триггера (top, left от viewport). null = панель закрыта.
+  anchor: { top: number; left: number } | null;
   onClose: () => void;
   videoId: string;
   videoUrl?: string | null;
   videoOwner?: string | null;
-  transcript: string; // оригинал или translation
-  initialVariants?: Variant[]; // если уже сохранены в saved_videos.ai_script_variants
+  transcript: string;
+  initialVariants?: Variant[];
   onVariantsGenerated?: (variants: Variant[]) => void;
 }
 
 export function AiScriptVideoModal({
-  isOpen, onClose, transcript, videoUrl, videoOwner,
+  anchor, onClose, transcript, videoUrl, videoOwner,
   initialVariants, onVariantsGenerated,
 }: Props) {
+  const isOpen = anchor !== null;
   const { canAfford, deduct } = useTokenBalance();
   const { createDraft } = useScriptDrafts();
   const { currentProject } = useProjectContext();
@@ -352,49 +355,61 @@ export function AiScriptVideoModal({
     return Boolean(draft);
   }, [createDraft, videoUrl, videoOwner, ctaIntent]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !anchor) return null;
 
   const openVariant = openIdx !== null ? variants[openIdx] : null;
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(8px)' }}
-          onClick={onClose}
-        >
-          <style>{`
-            @keyframes ririOrbModalFloat {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-8px); }
-            }
-            @keyframes ririOrbPulse {
-              0%, 100% { transform: scale(1); }
-              50% { transform: scale(1.04); }
-            }
-            @keyframes ririOrbEcho {
-              0% { transform: scale(1); opacity: 0.55; }
-              100% { transform: scale(2.2); opacity: 0; }
-            }
-            @keyframes ririOrbSpark {
-              0% { transform: rotate(0deg) translateX(var(--r, 85px)) scale(1); opacity: 0; }
-              10% { opacity: 1; }
-              90% { opacity: 1; }
-              100% { transform: rotate(360deg) translateX(var(--r, 85px)) scale(0.6); opacity: 0; }
-            }
-          `}</style>
+  // Расчёт ширины и max высоты от viewport
+  const panelWidth = Math.min(500, typeof window !== 'undefined' ? window.innerWidth - 16 : 500);
+  const panelMaxHeight = typeof window !== 'undefined'
+    ? Math.min(640, window.innerHeight - anchor.top - 12)
+    : 640;
+  // Если кнопка близко к правому краю — анкорим right вместо left
+  const leftPos = typeof window !== 'undefined' && anchor.left + panelWidth > window.innerWidth - 8
+    ? Math.max(8, window.innerWidth - panelWidth - 8)
+    : anchor.left;
+
+  return createPortal(
+    <>
+      <style>{`
+        @keyframes ririOrbModalFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes ririOrbPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.04); }
+        }
+        @keyframes ririOrbEcho {
+          0% { transform: scale(1); opacity: 0.55; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes ririOrbSpark {
+          0% { transform: rotate(0deg) translateX(var(--r, 85px)) scale(1); opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { transform: rotate(360deg) translateX(var(--r, 85px)) scale(0.6); opacity: 0; }
+        }
+      `}</style>
+      {/* Click outside для закрытия */}
+      <div
+        className="fixed inset-0 z-[34900]"
+        onClick={() => !loading && onClose()}
+      />
+      <AnimatePresence>
+        {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.97 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={iosSpringSoft}
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[20px] overflow-hidden bg-[#f5f6f8] shadow-2xl"
+            className="fixed z-[35000] flex flex-col rounded-2xl border border-slate-200 shadow-2xl overflow-hidden bg-[#f5f6f8]"
+            style={{
+              top: anchor.top,
+              left: leftPos,
+              width: panelWidth,
+              maxHeight: panelMaxHeight,
+            }}
           >
             {/* Header */}
             <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-200/60 bg-white">
@@ -504,9 +519,10 @@ export function AiScriptVideoModal({
               {openVariant && <DetailView v={openVariant} onSave={() => saveVariant(openVariant)} />}
             </div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </>,
+    document.body,
   );
 }
 

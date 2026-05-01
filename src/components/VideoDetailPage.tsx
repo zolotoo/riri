@@ -273,8 +273,9 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const [aiHookLangFilter, setAiHookLangFilter] = useState<'all' | 'ru' | 'en'>('all');
   const aiHooksBtnRef = useRef<HTMLButtonElement>(null);
   const [aiHooksPanelAnchor, setAiHooksPanelAnchor] = useState<{ top: number; left: number } | null>(null);
-  // ИИ-сценарий модалка (rewrite по transcript текущего видео)
-  const [showAiScriptModal, setShowAiScriptModal] = useState(false);
+  // ИИ-сценарий — inline-панель как у ИИ-хуков (rewrite по transcript видео)
+  const aiScriptBtnRef = useRef<HTMLButtonElement>(null);
+  const [aiScriptPanelAnchor, setAiScriptPanelAnchor] = useState<{ top: number; left: number } | null>(null);
 
   const projectStyles = currentProject?.projectStyles || [];
   const currentPromptStyle = editingStyle || (projectStyles.length === 1 ? projectStyles[0] : null);
@@ -2186,12 +2187,25 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   )} />
                 </button>
                 <button
+                  ref={aiScriptBtnRef}
                   onClick={() => {
                     if (!transcript?.trim() && !translation?.trim()) {
                       toast.error('Сначала добавьте транскрипцию');
                       return;
                     }
-                    setShowAiScriptModal(true);
+                    if (aiScriptPanelAnchor) {
+                      setAiScriptPanelAnchor(null);
+                      return;
+                    }
+                    const btn = aiScriptBtnRef.current;
+                    if (btn) {
+                      const rect = btn.getBoundingClientRect();
+                      const panelWidth = Math.min(500, window.innerWidth - 16);
+                      setAiScriptPanelAnchor({
+                        top: rect.bottom + 6,
+                        left: Math.max(8, rect.right - panelWidth),
+                      });
+                    }
                   }}
                   disabled={!transcript?.trim() && !translation?.trim()}
                   className={cn(
@@ -2205,6 +2219,10 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   <Sparkles className="w-3.5 h-3.5" />
                   ИИ-сценарий
                   <TokenBadge tokens={getTokenCost('sw_full_script')} variant="dark" />
+                  <ChevronDown className={cn(
+                    'w-3 h-3 transition-transform duration-200',
+                    aiScriptPanelAnchor && 'rotate-180'
+                  )} />
                 </button>
                 {(projectStyles.length > 0 || currentProject?.stylePrompt) && (
                   <div className="relative" ref={stylePickerRef}>
@@ -2380,8 +2398,8 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
       />
 
       <AiScriptVideoModal
-        isOpen={showAiScriptModal}
-        onClose={() => setShowAiScriptModal(false)}
+        anchor={aiScriptPanelAnchor}
+        onClose={() => setAiScriptPanelAnchor(null)}
         videoId={video.id}
         videoUrl={video.url || null}
         videoOwner={video.owner_username || null}
