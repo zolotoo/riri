@@ -1969,6 +1969,104 @@ ${hooksListText}
 
 // Этап 2: полный сценарий за один проход (хук+тело+концовка), 5 вариантов JARVIS-style.
 // Каждый вариант = адаптация одного из retrieved скелетов. Хук опционально pinned.
+// Query expansion: Gemini Flash расширяет короткую тему юзера в более чёткую
+// формулировку для лучшего vector matching. Также извлекает нишу и ключевые
+// термины — чтобы embedding ловил суть, а не поверхностные слова.
+async function expandQueryForRetrieval(seed) {
+  const prompt = `Пользователь хочет снять короткое видео (Reels/TikTok) на тему:
+"""
+${(seed || '').slice(0, 1500)}
+"""
+
+Помоги поиску похожих ВИРАЛЬНЫХ видео в нашей базе. Перепиши тему так, чтобы embedding-поиск нашёл максимально близкие по СМЫСЛУ видео.
+
+Верни СТРОГО JSON:
+{
+  "expanded": "одно-два предложения, которые ЯСНО описывают суть темы автора без воды (не вступления, не общие фразы)",
+  "niche": "одно слово из: fitness, nutrition, business, motivation, education, entertainment, lifestyle, beauty, travel, tech, finance, relationships, parenting, cooking, sport, other",
+  "key_terms": ["3-5 ключевых терминов и понятий которые будут в виральных видео ровно на эту тему"]
+}`;
+  try {
+    const { text } = await callOpenRouter({
+      apiKey: OPENROUTER_API_KEY,
+      model: MODELS.FLASH,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 500,
+      response_format: { type: 'json_object' },
+    });
+    if (!text) return null;
+    const parsed = parseJsonResponse(text);
+    if (!parsed?.expanded) return null;
+    return {
+      expanded: String(parsed.expanded || '').trim(),
+      niche: typeof parsed.niche === 'string' ? parsed.niche.trim() : null,
+      key_terms: Array.isArray(parsed.key_terms) ? parsed.key_terms.slice(0, 6).map(String) : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Re-rank: достали top-N через vector similarity, но vector ловит ключевые
+// слова и часто промахивается по смыслу. LLM смотрит на тему юзера + краткие
+// сводки кандидатов и выбирает 3 семантически релевантных.
+async function reRankCandidates(seed, candidates) {
+  if (!candidates?.length) return [];
+  if (candidates.length <= 3) return candidates;
+  const formatViews = (vc) => vc >= 1_000_000
+    ? `${(vc / 1_000_000).toFixed(1)}М`
+    : `${Math.round((vc || 0) / 1000)}К`;
+  const list = candidates.map((c, i) => {
+    const hookPreview = (c.hook_text || '').slice(0, 200).replace(/\s+/g, ' ');
+    const bodyPreview = (c.body_text || '').slice(0, 200).replace(/\s+/g, ' ');
+    return `${i + 1}. @${c.owner_username || '?'} (${formatViews(c.view_count)}, ${c.format_type})
+   ХУК: ${hookPreview}
+   ТЕМА: ${bodyPreview}`;
+  }).join('\n\n');
+
+  const prompt = `Пользователь хочет снять видео на тему:
+"""
+${(seed || '').slice(0, 1200)}
+"""
+
+Тебе даны ${candidates.length} виральных видео-кандидатов. Они отобраны по векторной близости, но vector часто ловит просто ключевые слова, а не смысл.
+
+КАНДИДАТЫ:
+
+${list}
+
+Выбери 3 видео которые СЕМАНТИЧЕСКИ ближе всего к теме автора. Учитывай:
+- Реальную тему/задачу видео (не просто упомянутые слова)
+- Угол подачи и целевую аудиторию
+- Структуру повествования которая подойдёт автору
+
+Если хороших семантических совпадений мало — лучше верни 2 хороших чем 3 средних. Если все плохие — верни пустой массив.
+
+Верни СТРОГО JSON: { "picked": [номера от 1 до ${candidates.length}, 0-3 элемента], "reason": "коротко почему именно эти" }`;
+  try {
+    const { text } = await callOpenRouter({
+      apiKey: OPENROUTER_API_KEY,
+      model: MODELS.FLASH,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 600,
+      response_format: { type: 'json_object' },
+    });
+    if (!text) return candidates.slice(0, 3);
+    const parsed = parseJsonResponse(text);
+    const picked = Array.isArray(parsed?.picked) ? parsed.picked : [];
+    const result = picked
+      .map((idx) => Number(idx))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= candidates.length)
+      .map((n) => candidates[n - 1]);
+    if (!result.length) return candidates.slice(0, 3);
+    return result.slice(0, 3);
+  } catch {
+    return candidates.slice(0, 3);
+  }
+}
+
 async function handleGenerateFullScript(req, res) {
   const {
     topic,
@@ -1986,33 +2084,66 @@ async function handleGenerateFullScript(req, res) {
   const queryText = topic?.trim() || reference_transcript?.trim() || hook_text?.trim();
   if (!queryText) return res.status(400).json({ error: 'Нет идеи, референса или хука для генерации' });
 
-  // 1. Embed запрос
-  const embedding = await jinaEmbed(queryText);
+  // 1. Query expansion — Flash расширяет короткую тему юзера в чёткую
+  // формулировку + извлекает нишу + ключевые термины. Это даёт embedding'у
+  // намного больше сигнала для retrieval.
+  const expansion = await expandQueryForRetrieval(queryText);
+  const queryForEmbedding = expansion?.expanded
+    ? `${expansion.expanded}\n\nКлючевые термины: ${(expansion.key_terms || []).join(', ')}\n\nИсходная идея: ${queryText.slice(0, 500)}`
+    : queryText;
+  // Если expansion вернул нишу и юзер её не указал — используем
+  const effectiveNiche = niche || (expansion?.niche || null);
+
+  // 2. Embed обогащённый запрос
+  const embedding = await jinaEmbed(queryForEmbedding);
   if (!embedding) return res.status(502).json({ error: 'Embedding failed' });
 
-  // 2. Фильтр длины
+  // 3. Фильтр длины
   let minSeconds = null;
   let maxSeconds = null;
   if (length_preference === 15) { minSeconds = 10; maxSeconds = 22; }
   else if (length_preference === 30) { minSeconds = 20; maxSeconds = 40; }
   else if (length_preference === 60) { minSeconds = 40; maxSeconds = 90; }
 
-  // 3. Достаём top-3 самых ПОХОЖИХ виральных видео ЦЕЛИКОМ — каждое со своим
-  // hook/body/cta текстами + скелетом. Будем переписывать каждое под тему
-  // юзера (как handleGenerateAiHook делает с хуками — точечный rewrite).
-  const fullVideos = await matchFullVideos(embedding, {
-    niche,
+  // 4. Top-15 кандидатов через vector similarity (вместо top-3 как раньше).
+  // Вектор ловит ключевые слова — даём LLM более широкий пул для семантического
+  // re-rank на следующем шаге.
+  let candidates = await matchFullVideos(embedding, {
+    niche: effectiveNiche,
     minViews: min_views,
     minSeconds,
     maxSeconds,
-    limit: 3,
+    limit: 15,
   });
+
+  // Если с фильтром по нише пусто — пробуем без фильтра
+  if (!candidates?.length && effectiveNiche) {
+    candidates = await matchFullVideos(embedding, {
+      niche: null,
+      minViews: min_views,
+      minSeconds,
+      maxSeconds,
+      limit: 15,
+    });
+  }
+
+  if (!candidates?.length) {
+    return res.status(200).json({
+      success: false,
+      variants: [],
+      message: 'В базе пока нет похожих видео. Попробуй другую формулировку темы.',
+    });
+  }
+
+  // 5. LLM re-rank: Flash смотрит тему юзера + краткие саммари 15 кандидатов
+  // и выбирает 3 СЕМАНТИЧЕСКИ релевантных (а не по ключевым словам).
+  const fullVideos = await reRankCandidates(queryText, candidates);
 
   if (!fullVideos?.length) {
     return res.status(200).json({
       success: false,
       variants: [],
-      message: 'В базе пока нет похожих видео. Попробуй другую формулировку темы.',
+      message: 'Нашёл кандидатов в базе, но семантически близких к твоей теме нет. Попробуй переформулировать или сказать конкретнее.',
     });
   }
 
@@ -2118,8 +2249,11 @@ ${videosBlock}
 }`;
 
   try {
+    // Финальный rewrite — Claude Sonnet 3.7 как primary (точнее держит структуру
+    // оригинала, реже скатывается в generic-фразы). Pro 2.5 / Flash как fallback
+    // если Sonnet упадёт в timeout или будет недоступен.
     const rawText = await callWithFallback(
-      [MODELS.FLASH, MODELS.PRO_3],
+      [MODELS.CLAUDE_SONNET_35, MODELS.PRO_3, MODELS.FLASH],
       [{ role: 'user', content: userPrompt }],
       {
         temperature: 0.6,
