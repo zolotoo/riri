@@ -703,17 +703,23 @@ export function ScriptStudio() {
               className="p-3 hover:shadow-md transition-shadow"
               onClick={() => { setOpenVariantIdx(i); setStep('detail'); }}
             >
+              {/* Source-бейдж сверху — сразу понятно на каком виральном видео основано */}
+              {v.source_reference?.owner_username && (
+                <div className="mb-2 flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2 py-1 w-fit">
+                  <span className="text-[11px] font-medium text-emerald-700">
+                    Адаптировано из @{v.source_reference.owner_username}
+                  </span>
+                  <span className="text-[10px] text-emerald-600">
+                    · {formatViews(v.source_reference.view_count)} views
+                  </span>
+                </div>
+              )}
               <div className="mb-1 flex items-center gap-2 text-[11px] text-slate-500">
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium">~{v.total_seconds}с</span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5">{v.format_type}</span>
               </div>
               <p className="text-[14px] font-medium leading-snug line-clamp-2 text-slate-900">{v.hook}</p>
               <p className="mt-1 text-[12px] text-slate-500 line-clamp-2">{v.body.slice(0, 110)}...</p>
-              {v.source_reference?.owner_username && (
-                <div className="mt-1.5 text-[11px] text-slate-400">
-                  на основе @{v.source_reference.owner_username} · {formatViews(v.source_reference.view_count)} views
-                </div>
-              )}
             </GlassCard>
           ))}
           <button
@@ -1029,9 +1035,15 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
             <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-[12px]">~{v.total_seconds}с</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5">{v.format_type}</span>
             {v.source_reference?.owner_username && (
-              <span className="text-[11px] text-slate-400">
+              <a
+                href={v.source_reference.url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => { if (!v.source_reference.url) e.preventDefault(); }}
+                className="rounded-full bg-emerald-50 border border-emerald-100 px-2 py-0.5 text-emerald-700 hover:bg-emerald-100 font-medium"
+              >
                 @{v.source_reference.owner_username} · {formatViews(v.source_reference.view_count)}
-              </span>
+              </a>
             )}
           </div>
           <button

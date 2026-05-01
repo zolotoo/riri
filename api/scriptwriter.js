@@ -78,6 +78,41 @@ async function matchViralParts(embedding, partType, { niche = null, minViews = 5
   }
 }
 
+// Поиск top-N виральных видео ПОЛНОСТЬЮ — скелет + hook/body/cta тексты одного видео.
+// Используется для rewrite-подхода: каждый retrieved видео = отдельный variant сценария
+// (адаптация конкретного оригинала под тему юзера, без "сочинения с нуля").
+async function matchFullVideos(embedding, {
+  niche = null,
+  minViews = 50000,
+  minSeconds = null,
+  maxSeconds = null,
+  limit = 3,
+} = {}) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !embedding) return [];
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/match_full_videos`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query_embedding: embedding,
+        match_count: limit,
+        filter_niche: niche,
+        min_view_count: minViews,
+        min_total_seconds: minSeconds,
+        max_total_seconds: maxSeconds,
+      }),
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 // Поиск похожих структурных скелетов (Этап 1: video_skeletons)
 async function matchSkeletons(embedding, {
   niche = null,
@@ -1941,14 +1976,13 @@ async function handleGenerateFullScript(req, res) {
     hook_text,
     niche = null,
     tone_profile = null,
-    length_preference = null, // 15 | 30 | 60 | null
-    cta_intent = null,        // 'soft_loop' | 'save_bait' | 'comment_bait' | 'profile_visit' | null
+    length_preference = null,
+    cta_intent = null,
     min_views = 50000,
   } = req.body;
 
   if (!OPENROUTER_API_KEY) return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
 
-  // Запрос: idea > reference_transcript > hook_text
   const queryText = topic?.trim() || reference_transcript?.trim() || hook_text?.trim();
   if (!queryText) return res.status(400).json({ error: 'Нет идеи, референса или хука для генерации' });
 
@@ -1956,167 +1990,139 @@ async function handleGenerateFullScript(req, res) {
   const embedding = await jinaEmbed(queryText);
   if (!embedding) return res.status(502).json({ error: 'Embedding failed' });
 
-  // 2. Фильтр длины (опционально)
+  // 2. Фильтр длины
   let minSeconds = null;
   let maxSeconds = null;
   if (length_preference === 15) { minSeconds = 10; maxSeconds = 22; }
   else if (length_preference === 30) { minSeconds = 20; maxSeconds = 40; }
   else if (length_preference === 60) { minSeconds = 40; maxSeconds = 90; }
 
-  // 3. Параллельно retrieval всех 4 слоёв (5 скелетов + по 3 inspiration текста)
-  const [skeletons, hooks, bodies, ctas] = await Promise.all([
-    matchSkeletons(embedding, {
-      niche,
-      minViews: min_views,
-      minSeconds,
-      maxSeconds,
-      limit: 5,
-    }),
-    matchViralHooks(embedding, {
-      niche,
-      minViews: min_views,
-      limit: 3,
-    }),
-    matchViralParts(embedding, 'body', {
-      niche,
-      minViews: min_views,
-      limit: 3,
-    }),
-    matchViralParts(embedding, 'cta', {
-      niche,
-      minViews: min_views,
-      limit: 3,
-    }),
-  ]);
+  // 3. Достаём top-3 самых ПОХОЖИХ виральных видео ЦЕЛИКОМ — каждое со своим
+  // hook/body/cta текстами + скелетом. Будем переписывать каждое под тему
+  // юзера (как handleGenerateAiHook делает с хуками — точечный rewrite).
+  const fullVideos = await matchFullVideos(embedding, {
+    niche,
+    minViews: min_views,
+    minSeconds,
+    maxSeconds,
+    limit: 3,
+  });
 
-  if (!skeletons?.length) {
+  if (!fullVideos?.length) {
     return res.status(200).json({
       success: false,
       variants: [],
-      message: 'В базе пока нет похожих скелетов. Попробуй другую тему или подожди пока база наполнится.',
+      message: 'В базе пока нет похожих видео. Попробуй другую формулировку темы.',
     });
   }
 
-  // 4. Сериализация retrieved для промпта
   const formatViews = (vc) => vc >= 1_000_000
     ? `${(vc / 1_000_000).toFixed(1)}М`
-    : `${Math.round(vc / 1000)}К`;
+    : `${Math.round((vc || 0) / 1000)}К`;
 
-  const skeletonsText = skeletons.map((s, i) => {
-    const sectionsStr = Array.isArray(s.sections)
-      ? s.sections.map(sec => `${sec.start_sec}-${sec.end_sec}s ${sec.type}: ${sec.purpose || ''}`).join(' | ')
-      : '';
-    const transitionsStr = Array.isArray(s.key_transitions) ? s.key_transitions.join('; ') : '';
-    return `СКЕЛЕТ ${i + 1} | ${s.total_seconds}с | ${s.format_type} | хук: ${s.hook_type} | CTA: ${s.cta_type} | темп: ${s.pacing}
-Структура: ${s.structure_summary}
-Секции: ${sectionsStr}
-Переходы: ${transitionsStr}
-Источник: @${s.owner_username || '?'} (${formatViews(s.view_count || 0)} views)`;
+  // 4. Сериализуем 3 оригинала с полным текстом
+  const videosBlock = fullVideos.map((v, i) => {
+    const sectionsStr = Array.isArray(v.sections)
+      ? v.sections.map(sec => `${sec.start_sec}-${sec.end_sec}s ${sec.type}: ${sec.purpose || ''}`).join(' → ')
+      : v.structure_summary || '';
+    return `═══ ВИДЕО-ОРИГИНАЛ ${i + 1} ═══
+@${v.owner_username || '?'} · ${formatViews(v.view_count)} views · ${v.total_seconds}с · формат: ${v.format_type} · темп: ${v.pacing}
+Структура: ${sectionsStr}
+Тип хука: ${v.hook_type} | Тип CTA: ${v.cta_type}
+
+ОРИГИНАЛЬНЫЙ ХУК:
+${v.hook_text || '(не извлечён, используй структуру)'}
+
+ОРИГИНАЛЬНОЕ ТЕЛО:
+${v.body_text || '(не извлечено, разверни тему по секциям выше)'}
+
+ОРИГИНАЛЬНАЯ КОНЦОВКА:
+${v.cta_text || '(не извлечена, закрой по типу CTA)'}`;
   }).join('\n\n');
-
-  const hooksText = hooks?.length
-    ? hooks.map((h, i) => `${i + 1}. [${formatViews(h.view_count || 0)}] ${h.content}`).join('\n')
-    : 'Дополнительных хуков по теме не найдено.';
-
-  const bodiesText = bodies?.length
-    ? bodies.map((b, i) => `${i + 1}. [${formatViews(b.view_count || 0)}] ${(b.content || '').slice(0, 280)}`).join('\n')
-    : 'Тел виральных видео по теме не найдено.';
-
-  const ctasText = ctas?.length
-    ? ctas.map((c, i) => `${i + 1}. [${formatViews(c.view_count || 0)}] ${c.content}`).join('\n')
-    : 'Концовок виральных видео по теме не найдено.';
 
   const toneSection = tone_profile
     ? `ПРОФИЛЬ ГОЛОСА АВТОРА:
 ${typeof tone_profile === 'string' ? tone_profile : JSON.stringify(tone_profile, null, 2)}
 
-Каждое предложение должно звучать так, как сказал бы именно этот автор. Используй его словарь, темп, типичные обороты.`
-    : 'ПРОФИЛЬ ГОЛОСА: не задан, используй живой разговорный русский без канцеляризмов.';
+Используй словарь и темп этого автора в переписанной версии.`
+    : 'Используй живой разговорный русский без канцеляризмов.';
 
   const ctaSection = cta_intent
-    ? `ЦЕЛЬ КОНЦОВКИ (CTA intent): ${cta_intent}
-- soft_loop: возврат к хуку с новым смыслом, без явного призыва
-- save_bait: ценность которую захочется пересмотреть/сохранить
-- comment_bait: вопрос или провокация для комментария
-- profile_visit: лёгкий призыв зайти в профиль за продолжением`
-    : 'CTA: используй cta_type из каждого скелета.';
+    ? `ЦЕЛЬ КОНЦОВКИ (override): ${cta_intent}
+- save_bait — сделай ценность для пересмотра/сохранения
+- comment_bait — задай вопрос/спор для комментариев
+- profile_visit — мягкий призыв в профиль
+- soft_loop — возврат к хуку с новым смыслом`
+    : 'Тип концовки бери из оригинала (cta_type).';
 
   const hookSection = hook_text?.trim()
-    ? `ВЫБРАННЫЙ ХУК (используй его в КАЖДОМ варианте без изменений в первой строке):
-"""
-${hook_text.trim()}
-"""`
+    ? `\n⚠️ ОБЯЗАТЕЛЬНЫЙ ХУК ДЛЯ ВСЕХ ВАРИАНТОВ:\n"${hook_text.trim()}"\nЭтот хук уже выбран — поставь его первой строкой каждого варианта БЕЗ ИЗМЕНЕНИЙ.\n`
     : '';
 
-  const userPrompt = `Ты сценарист коротких видео для Instagram Reels / TikTok / YouTube Shorts.
-Сгенерируй 3 РАЗНЫХ варианта полного сценария (хук + тело + концовка) на основе идеи автора, используя структурные скелеты вирусных видео и tone профиль.
+  const userPrompt = `Ты адаптируешь готовые виральные сценарии под новую тему. ТВОЯ ЗАДАЧА — НЕ СОЧИНЯТЬ, А ПЕРЕПИСЫВАТЬ.
 
-ИДЕЯ:
+ТЕМА АВТОРА:
 """
-${queryText.slice(0, 2500)}
+${queryText.slice(0, 2000)}
 """
-
 ${hookSection}
-
 ${toneSection}
-
-СТРУКТУРНЫЕ СКЕЛЕТЫ ИЗ ВИРУСНЫХ ВИДЕО (используй ПЕРВЫЕ ТРИ как каркас, по одному на вариант):
-
-${skeletonsText}
-
-5 ВИРУСНЫХ ХУКОВ ПО ПОХОЖИМ ТЕМАМ (для inspiration языка хука, не копировать):
-${hooksText}
-
-5 ВИРУСНЫХ ТЕЛ ПО ПОХОЖИМ ТЕМАМ (как разворачивают тему в нише — формулировки, переходы, ритм):
-${bodiesText}
-
-5 ВИРУСНЫХ КОНЦОВОК ПО ПОХОЖИМ ТЕМАМ (как закрывают видео в нише):
-${ctasText}
 
 ${ctaSection}
 
-ПРАВИЛА:
-1. 3 варианта = первые 3 разных скелета выше. Каждый вариант — адаптация ОДНОГО скелета по индексу 1..3.
-2. Длина hook+body+ending в словах ≈ total_seconds × 2.5 (±20%).
-3. Hook = 1-3 предложения, цепляют с первой секунды.
-4. Body = непрерывный текст основной части, разверни идею по структуре скелета.
-5. Ending — по cta_type скелета (или по cta_intent если задан). Для soft_loop концовка возвращает к хуку с новым смыслом.
-6. Shot list — для каждой секции скелета: что говорится / что показывается в кадре.
-7. Запрещены generic-фразы: "в современном мире", "не стоит недооценивать", "интересно но...", "представьте себе", "согласитесь" и подобный AI-канцелярит.
-8. Если задан ВЫБРАННЫЙ ХУК — он должен идти первой строкой каждого варианта без изменений.
+ВНИЗУ ${fullVideos.length} РЕАЛЬНЫХ ВИРУСНЫХ ВИДЕО ПО ПОХОЖИМ ТЕМАМ. Для каждого ниже даны его ОРИГИНАЛЬНЫЙ ХУК + ТЕЛО + КОНЦОВКА.
 
-Верни СТРОГО JSON без markdown:
+═══════════════════════════════════════
+${videosBlock}
+═══════════════════════════════════════
+
+ЧТО ДЕЛАТЬ — ДЛЯ КАЖДОГО ИЗ ${fullVideos.length} ВИДЕО:
+1. Возьми его оригинальный hook + body + ending
+2. Перепиши их СТРОГО ПОД ТЕМУ автора, сохраняя:
+   - тот же приём в хуке (если оригинал начинается с цифры — твой тоже; если с провокации — твой тоже)
+   - ту же структуру и ритм тела (то же количество поворотов, та же логика разворачивания)
+   - тот же тип закрытия концовки
+   - ту же длину (примерно столько же слов)
+3. Меняй ТОЛЬКО конкретику: персонажей, факты, примеры, цифры — на те, что относятся к теме автора
+4. НЕ ВЫДУМЫВАЙ структуру, НЕ ДОБАВЛЯЙ от себя приёмы которых не было в оригинале
+5. Shot list — на каждую секцию скелета: что говорится (твой переписанный текст) и что показывается в кадре
+
+ЗАПРЕЩЕНО:
+- Generic-фразы: "в современном мире", "не стоит недооценивать", "интересно но...", "представьте себе", "согласитесь", "хочу поделиться"
+- Сочинять структуру с нуля если оригинал короткий — лучше повторить минимализм
+- Использовать оригинальный текст один-в-один — обязательна адаптация под тему
+
+Верни СТРОГО JSON, БЕЗ markdown:
 {
   "variants": [
     {
       "skeleton_index": 1,
-      "total_seconds": <число>,
-      "format_type": "...",
-      "hook": "...",
-      "body": "...",
-      "ending": "...",
+      "total_seconds": <число из видео-оригинала 1>,
+      "format_type": "<из оригинала>",
+      "hook": "переписанный hook под тему",
+      "body": "переписанный body под тему",
+      "ending": "переписанная концовка под тему",
       "shot_list": [
         {"section": "hook", "speech": "...", "on_screen": "..."},
-        {"section": "context", "speech": "...", "on_screen": "..."}
+        {"section": "...", "speech": "...", "on_screen": "..."}
       ],
       "source_reference": {
-        "owner_username": "...",
-        "view_count": <число>,
-        "url": "..."
+        "owner_username": "<из оригинала 1>",
+        "view_count": <из оригинала 1>,
+        "url": "<из оригинала 1>"
       }
-    }
+    },
+    { "skeleton_index": 2, ... },
+    { "skeleton_index": 3, ... }
   ]
 }`;
 
   try {
-    // Flash primary (быстрее Pro в 3-5×), Pro fallback если Flash облажается.
-    // Снизили count с 5 до 3 вариантов чтобы output JSON помещался в 4500 токенов
-    // и не обрезался на середине (было: SyntaxError: Unterminated string).
     const rawText = await callWithFallback(
       [MODELS.FLASH, MODELS.PRO_3],
       [{ role: 'user', content: userPrompt }],
       {
-        temperature: 0.7,
+        temperature: 0.6,
         max_tokens: 4500,
         response_format: { type: 'json_object' },
       },
@@ -2124,17 +2130,19 @@ ${ctaSection}
     if (!rawText) return res.status(502).json({ error: 'Empty response' });
     const parsed = parseJsonResponse(rawText);
 
-    // Дополним source_reference из retrieved-скелетов на случай если модель не вернула
+    // Дополняем source_reference из retrieved-видео (если AI не вернул)
     const variants = Array.isArray(parsed.variants) ? parsed.variants.map((v) => {
       const idx = Number(v.skeleton_index);
-      const sk = idx >= 1 && idx <= skeletons.length ? skeletons[idx - 1] : null;
+      const orig = idx >= 1 && idx <= fullVideos.length ? fullVideos[idx - 1] : null;
       const ref = v.source_reference || {};
       return {
         ...v,
-        source_reference: sk ? {
-          owner_username: ref.owner_username || sk.owner_username || null,
-          view_count: ref.view_count || sk.view_count || null,
-          url: ref.url || sk.url || null,
+        total_seconds: v.total_seconds || (orig?.total_seconds ?? null),
+        format_type: v.format_type || (orig?.format_type ?? null),
+        source_reference: orig ? {
+          owner_username: ref.owner_username || orig.owner_username || null,
+          view_count: ref.view_count || orig.view_count || null,
+          url: ref.url || orig.url || null,
         } : ref,
       };
     }) : [];
@@ -2143,10 +2151,7 @@ ${ctaSection}
       success: true,
       variants,
       retrieved: {
-        skeletons_count: skeletons.length,
-        hooks_count: hooks?.length || 0,
-        bodies_count: bodies?.length || 0,
-        ctas_count: ctas?.length || 0,
+        videos_count: fullVideos.length,
       },
     });
   } catch (err) {
