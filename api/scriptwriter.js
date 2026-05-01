@@ -2084,14 +2084,14 @@ async function handleGenerateFullScript(req, res) {
   const queryText = topic?.trim() || reference_transcript?.trim() || hook_text?.trim();
   if (!queryText) return res.status(400).json({ error: 'Нет идеи, референса или хука для генерации' });
 
-  // 1. Query expansion — Flash расширяет короткую тему юзера в чёткую
-  // формулировку + извлекает нишу + ключевые термины. Это даёт embedding'у
-  // намного больше сигнала для retrieval.
-  const expansion = await expandQueryForRetrieval(queryText);
+  // 1. Query expansion — только для коротких тем (<150 символов).
+  // Длинные темы уже дают достаточный сигнал embedding'у, expansion лишний
+  // и съедает 2-3 секунды из 60s timeout.
+  const needsExpansion = queryText.length < 150;
+  const expansion = needsExpansion ? await expandQueryForRetrieval(queryText) : null;
   const queryForEmbedding = expansion?.expanded
     ? `${expansion.expanded}\n\nКлючевые термины: ${(expansion.key_terms || []).join(', ')}\n\nИсходная идея: ${queryText.slice(0, 500)}`
     : queryText;
-  // Если expansion вернул нишу и юзер её не указал — используем
   const effectiveNiche = niche || (expansion?.niche || null);
 
   // 2. Embed обогащённый запрос
@@ -2252,12 +2252,14 @@ ${videosBlock}
     // Финальный rewrite — Claude Sonnet 3.7 как primary (точнее держит структуру
     // оригинала, реже скатывается в generic-фразы). Pro 2.5 / Flash как fallback
     // если Sonnet упадёт в timeout или будет недоступен.
+    // max_tokens 3500 — output 3 вариантов с shot_list укладывается, уменьшение
+    // с 4500 ускоряет Sonnet на 20-30% и снижает риск 504 в 60s окне.
     const rawText = await callWithFallback(
       [MODELS.CLAUDE_SONNET_35, MODELS.PRO_3, MODELS.FLASH],
       [{ role: 'user', content: userPrompt }],
       {
         temperature: 0.6,
-        max_tokens: 4500,
+        max_tokens: 3500,
         response_format: { type: 'json_object' },
       },
     );
