@@ -20,6 +20,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useRadar } from '../hooks/useRadar';
 import { StyleTrainModal } from './StyleTrainModal';
 import { CopyStylesToProjectModal } from './CopyStylesToProjectModal';
+import { AiScriptVideoModal } from './AiScriptVideoModal';
 import { useProjectContext } from '../contexts/ProjectContext';
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
 import type { ProjectTemplateItem, ProjectStyle, DescriptionTemplate } from '../hooks/useProjects';
@@ -272,6 +273,8 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
   const [aiHookLangFilter, setAiHookLangFilter] = useState<'all' | 'ru' | 'en'>('all');
   const aiHooksBtnRef = useRef<HTMLButtonElement>(null);
   const [aiHooksPanelAnchor, setAiHooksPanelAnchor] = useState<{ top: number; left: number } | null>(null);
+  // ИИ-сценарий модалка (rewrite по transcript текущего видео)
+  const [showAiScriptModal, setShowAiScriptModal] = useState(false);
 
   const projectStyles = currentProject?.projectStyles || [];
   const currentPromptStyle = editingStyle || (projectStyles.length === 1 ? projectStyles[0] : null);
@@ -2182,6 +2185,27 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                     showAiHooksPanel && 'rotate-180'
                   )} />
                 </button>
+                <button
+                  onClick={() => {
+                    if (!transcript?.trim() && !translation?.trim()) {
+                      toast.error('Сначала добавьте транскрипцию');
+                      return;
+                    }
+                    setShowAiScriptModal(true);
+                  }}
+                  disabled={!transcript?.trim() && !translation?.trim()}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                    (transcript?.trim() || translation?.trim())
+                      ? 'bg-slate-800 hover:bg-slate-900 text-white'
+                      : 'bg-slate-300 cursor-not-allowed text-slate-500'
+                  )}
+                  title="Сгенерировать сценарий по структуре этого виральногo видео"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  ИИ-сценарий
+                  <TokenBadge tokens={getTokenCost('sw_full_script')} variant="dark" />
+                </button>
                 {(projectStyles.length > 0 || currentProject?.stylePrompt) && (
                   <div className="relative" ref={stylePickerRef}>
                     <button
@@ -2353,6 +2377,15 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
         open={showCopyStylesModal}
         onClose={() => setShowCopyStylesModal(false)}
         sourceProject={currentProject}
+      />
+
+      <AiScriptVideoModal
+        isOpen={showAiScriptModal}
+        onClose={() => setShowAiScriptModal(false)}
+        videoId={video.id}
+        videoUrl={video.url || null}
+        videoOwner={video.owner_username || null}
+        transcript={(translation?.trim() || transcript?.trim()) ?? ''}
       />
 
       {/* ИИ-хуки — floating dropdown panel */}
