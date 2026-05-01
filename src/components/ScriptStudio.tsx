@@ -1028,7 +1028,7 @@ function VariantDetail({ v, onBack, onSave }: { v: Variant; onBack: () => void; 
   }, [saving, saved, onSave]);
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: BG }}>
+    <div className="h-screen overflow-y-auto pb-24" style={{ background: BG }}>
       <div className="sticky top-0 z-10 border-b border-slate-200/60 bg-white/85 backdrop-blur-sm">
         <div className="mx-auto max-w-2xl flex items-center gap-3 px-4 py-3">
           <button
