@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Loader2, ArrowLeft, Copy, Bookmark, Check, ChevronRight,
@@ -7,6 +7,8 @@ import {
 import { useTokenBalance } from '../contexts/TokenBalanceContext';
 import { useScriptDrafts } from '../hooks/useScriptDrafts';
 import { useProjectContext } from '../contexts/ProjectContext';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../utils/supabase';
 import { getTokenCost } from '../constants/tokenCosts';
 import { TokenBadge } from './ui/TokenBadge';
 import { cn } from '../utils/cn';
@@ -65,23 +67,75 @@ const LOADING_LINES = [
   'Ещё пара секунд — почти готово',
 ];
 
-function RiriOrb({ size = 80 }: { size?: number }) {
+// Анимированный RiRi-орб для loading-стейта: пульсация + 3 echo-волны +
+// 6 искорок крутятся по орбите + плавающее движение вверх-вниз.
+// Делаем максимально запоминающимся — чтобы юзер скриншотил и постил.
+function RiriOrb({ size = 100 }: { size?: number }) {
   const s = size;
   return (
     <div
-      className="rounded-full flex-shrink-0 select-none"
-      style={{
-        width: s,
-        height: s,
-        background: `radial-gradient(circle at 36% 28%, #ffffff 0%, #eceef4 20%, #d0d4e2 44%, #a8aec0 68%, #787e92 88%, #5a6070 100%)`,
-        boxShadow: `
-          inset ${-s * 0.07}px ${-s * 0.07}px ${s * 0.18}px rgba(40,44,60,0.28),
-          inset ${s * 0.07}px ${s * 0.055}px ${s * 0.16}px rgba(255,255,255,0.72),
-          0 ${s * 0.1}px ${s * 0.42}px rgba(80,88,120,0.16)
-        `,
-        animation: 'ririOrbModalFloat 3.5s ease-in-out infinite',
-      }}
-    />
+      className="relative flex items-center justify-center select-none"
+      style={{ width: s * 2, height: s * 2 }}
+    >
+      {/* Echo волны вокруг орба */}
+      {[0, 1, 2].map((i) => (
+        <div
+          key={`echo-${i}`}
+          className="absolute rounded-full"
+          style={{
+            width: s,
+            height: s,
+            border: '1.5px solid rgba(120, 130, 160, 0.4)',
+            animation: `ririOrbEcho 3.2s ease-out ${i * 1.07}s infinite`,
+          }}
+        />
+      ))}
+
+      {/* Сам орб */}
+      <div
+        className="rounded-full flex-shrink-0 relative"
+        style={{
+          width: s,
+          height: s,
+          background: `radial-gradient(circle at 36% 28%, #ffffff 0%, #eceef4 18%, #c8ccd9 42%, #8b91a3 68%, #5a6070 92%)`,
+          boxShadow: `
+            inset ${-s * 0.07}px ${-s * 0.07}px ${s * 0.18}px rgba(40,44,60,0.32),
+            inset ${s * 0.07}px ${s * 0.055}px ${s * 0.16}px rgba(255,255,255,0.85),
+            0 ${s * 0.1}px ${s * 0.42}px rgba(80,88,120,0.25),
+            0 0 ${s * 0.5}px rgba(140,150,180,0.18)
+          `,
+          animation: 'ririOrbModalFloat 3.5s ease-in-out infinite, ririOrbPulse 2.4s ease-in-out infinite',
+        }}
+      />
+
+      {/* Орбитальные искорки — 6 штук, разный delay и radius */}
+      {[0, 1, 2, 3, 4, 5].map((i) => {
+        const angle = (i * 60); // градусы
+        const radius = s * 0.85;
+        return (
+          <div
+            key={`spark-${i}`}
+            className="absolute"
+            style={{
+              width: 6,
+              height: 6,
+              animation: `ririOrbSpark 4s linear ${i * 0.4}s infinite`,
+              transform: `rotate(${angle}deg) translateX(${radius}px)`,
+            }}
+          >
+            <div
+              className="rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                background: 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
+                boxShadow: '0 0 8px rgba(255,255,255,0.9)',
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -164,6 +218,8 @@ export function AiScriptVideoModal({
   const { canAfford, deduct } = useTokenBalance();
   const { createDraft } = useScriptDrafts();
   const { currentProject } = useProjectContext();
+  const { user } = useAuth();
+  const cachedToneRef = useRef<string | null>(null);
 
   const [variants, setVariants] = useState<Variant[]>(initialVariants || []);
   const [openIdx, setOpenIdx] = useState<number | null>(null);
@@ -171,9 +227,37 @@ export function AiScriptVideoModal({
   const [ctaIntent, setCtaIntent] = useState<CtaIntent>(null);
   const [showCtaPicker, setShowCtaPicker] = useState(!initialVariants?.length);
 
-  const toneProfile = useMemo(() => {
+  const projectStylePrompt = useMemo(() => {
     return currentProject?.projectStyles?.[0]?.prompt ?? null;
   }, [currentProject]);
+
+  // Подгружаем tone profile из последнего анализа конкурента юзера, если он
+  // ранее делал анализ — там в user_tone_profile лежит JSON со стилем по 12
+  // последним рилсам. Это даёт автоматическую персонализацию без ручного
+  // обучения подчерка.
+  const fetchUserToneProfile = useCallback(async (): Promise<string | null> => {
+    if (cachedToneRef.current) return cachedToneRef.current;
+    if (!user?.id) return null;
+    try {
+      const { data } = await supabase
+        .from('competitor_analyses')
+        .select('user_tone_profile')
+        .eq('user_id', user.id)
+        .not('user_tone_profile', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data?.user_tone_profile) return null;
+      const tp = typeof data.user_tone_profile === 'string'
+        ? data.user_tone_profile
+        : JSON.stringify(data.user_tone_profile);
+      cachedToneRef.current = tp;
+      return tp;
+    } catch (e) {
+      console.warn('fetchUserToneProfile:', e);
+      return null;
+    }
+  }, [user?.id]);
 
   // Reset когда модалка открывается заново
   useEffect(() => {
@@ -202,6 +286,10 @@ export function AiScriptVideoModal({
     setLoading(true);
     setShowCtaPicker(false);
     try {
+      // Tone profile: project style → user tone profile из анализа инсты → null
+      const userTone = await fetchUserToneProfile();
+      const tone_profile = projectStylePrompt || userTone || null;
+
       await deduct(cost, { action: 'sw_full_script', section: 'video-detail', label: 'ИИ-сценарий по видео' });
       const res = await fetch('/api/scriptwriter', {
         method: 'POST',
@@ -209,7 +297,7 @@ export function AiScriptVideoModal({
         body: JSON.stringify({
           action: 'generate-full-script',
           reference_transcript: transcript.trim(),
-          tone_profile: toneProfile,
+          tone_profile,
           cta_intent: ctaIntent,
         }),
       });
@@ -243,7 +331,7 @@ export function AiScriptVideoModal({
     } finally {
       setLoading(false);
     }
-  }, [transcript, ctaIntent, toneProfile, canAfford, deduct, onVariantsGenerated]);
+  }, [transcript, ctaIntent, projectStylePrompt, fetchUserToneProfile, canAfford, deduct, onVariantsGenerated]);
 
   const saveVariant = useCallback(async (v: Variant): Promise<boolean> => {
     const fullText = `${v.hook}\n\n${v.body}\n\n${v.ending}`;
@@ -283,7 +371,21 @@ export function AiScriptVideoModal({
           <style>{`
             @keyframes ririOrbModalFloat {
               0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-6px); }
+              50% { transform: translateY(-8px); }
+            }
+            @keyframes ririOrbPulse {
+              0%, 100% { transform: scale(1); }
+              50% { transform: scale(1.04); }
+            }
+            @keyframes ririOrbEcho {
+              0% { transform: scale(1); opacity: 0.55; }
+              100% { transform: scale(2.2); opacity: 0; }
+            }
+            @keyframes ririOrbSpark {
+              0% { transform: rotate(0deg) translateX(var(--r, 85px)) scale(1); opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { transform: rotate(360deg) translateX(var(--r, 85px)) scale(0.6); opacity: 0; }
             }
           `}</style>
           <motion.div

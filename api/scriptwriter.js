@@ -2036,14 +2036,14 @@ ${(seed || '').slice(0, 1200)}
 
 ${list}
 
-Выбери 3 видео которые СЕМАНТИЧЕСКИ ближе всего к теме автора. Учитывай:
+Выбери РОВНО 3 видео которые СЕМАНТИЧЕСКИ ближе всего к теме автора. Учитывай:
 - Реальную тему/задачу видео (не просто упомянутые слова)
 - Угол подачи и целевую аудиторию
 - Структуру повествования которая подойдёт автору
 
-Если хороших семантических совпадений мало — лучше верни 2 хороших чем 3 средних. Если все плохие — верни пустой массив.
+Должно быть РОВНО 3 индекса — если идеальных мало, добавь следующие по близости. Только если в списке вообще ничего рядом по смыслу — верни пустой массив.
 
-Верни СТРОГО JSON: { "picked": [номера от 1 до ${candidates.length}, 0-3 элемента], "reason": "коротко почему именно эти" }`;
+Верни СТРОГО JSON: { "picked": [3 номера от 1 до ${candidates.length}], "reason": "коротко почему именно эти" }`;
   try {
     const { text } = await callOpenRouter({
       apiKey: OPENROUTER_API_KEY,
@@ -2061,6 +2061,14 @@ ${list}
       .filter((n) => Number.isFinite(n) && n >= 1 && n <= candidates.length)
       .map((n) => candidates[n - 1]);
     if (!result.length) return candidates.slice(0, 3);
+    // Если LLM вернул меньше 3 — добиваем из vector top, чтобы юзер всегда видел 3 варианта
+    if (result.length < 3) {
+      const usedIds = new Set(result.map((r) => r.video_id));
+      for (const c of candidates) {
+        if (result.length >= 3) break;
+        if (!usedIds.has(c.video_id)) result.push(c);
+      }
+    }
     return result.slice(0, 3);
   } catch {
     return candidates.slice(0, 3);

@@ -2144,7 +2144,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-wrap">
                 <button
                   ref={aiHooksBtnRef}
                   onClick={() => {
@@ -2386,6 +2386,12 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
         videoUrl={video.url || null}
         videoOwner={video.owner_username || null}
         transcript={(translation?.trim() || transcript?.trim()) ?? ''}
+        initialVariants={(video as { ai_script_variants?: unknown[] }).ai_script_variants as never}
+        onVariantsGenerated={async (vs) => {
+          try {
+            await supabase.from('saved_videos').update({ ai_script_variants: vs }).eq('id', video.id);
+          } catch (e) { console.warn('save ai_script_variants:', e); }
+        }}
       />
 
       {/* ИИ-хуки — floating dropdown panel */}
