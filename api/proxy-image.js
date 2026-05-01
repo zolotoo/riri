@@ -31,19 +31,33 @@ export default async function handler(req, res) {
 
     // 2. Если в кэше нет — получаем свежий URL через RapidAPI
     console.log(`[Proxy] Cache miss for ${shortcode}, fetching from Instagram...`);
-    const infoRes = await fetch(`https://instagram-scraper-20251.p.rapidapi.com/api/reel-info?shortcode=${shortcode}`, {
+    const RAPIDAPI_HOST = 'instagram-scraper-20251.p.rapidapi.com';
+    const infoRes = await fetch(`https://${RAPIDAPI_HOST}/postdetail/?code_or_url=${shortcode}`, {
       headers: {
-        'X-RapidAPI-Key': RAPIDAPI_KEY,
-        'X-RapidAPI-Host': 'instagram-scraper-20251.p.rapidapi.com'
+        'x-rapidapi-key': RAPIDAPI_KEY,
+        'x-rapidapi-host': RAPIDAPI_HOST,
       }
     });
 
     if (!infoRes.ok) {
-      throw new Error(`Instagram API failed with status ${infoRes.status}`);
+      const text = await infoRes.text().catch(() => '');
+      throw new Error(`Instagram API failed: ${infoRes.status} ${text.slice(0, 200)}`);
     }
 
     const infoData = await infoRes.json();
-    const freshThumbUrl = infoData.thumbnail_url || infoData.carousel_slides?.[0];
+    const media = infoData?.data || infoData?.items?.[0] || infoData;
+    const candidates = media?.image_versions2?.candidates || media?.image_versions?.candidates || [];
+    const carouselMedia = media?.carousel_media || media?.children?.items || [];
+    const firstCarouselThumb = Array.isArray(carouselMedia) && carouselMedia[0]
+      ? (carouselMedia[0].image_versions2?.candidates?.[0]?.url
+        || carouselMedia[0].image_versions?.candidates?.[0]?.url
+        || carouselMedia[0].display_url)
+      : null;
+    const freshThumbUrl = candidates[0]?.url
+      || media?.thumbnail_url
+      || media?.display_url
+      || media?.thumbnail_src
+      || firstCarouselThumb;
 
     if (!freshThumbUrl) {
       return res.status(404).send('Thumbnail not found in Instagram');
