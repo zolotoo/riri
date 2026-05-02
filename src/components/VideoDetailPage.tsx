@@ -2166,7 +2166,7 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   }}
                   disabled={isGeneratingScript || (!transcript?.trim() && !script?.trim())}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors whitespace-nowrap',
                     (transcript?.trim() || script?.trim())
                       ? 'bg-slate-700 hover:bg-slate-800 text-white disabled:opacity-50'
                       : 'bg-slate-300 cursor-not-allowed text-slate-500'
@@ -2174,9 +2174,9 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   title="Найти топ-10 вирусных хуков из базы и адаптировать под ваш сценарий"
                 >
                   {isGeneratingAiHook ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-3 h-3 animate-spin" />
                   ) : (
-                    <Zap className="w-3.5 h-3.5" />
+                    <Zap className="w-3 h-3" />
                   )}
                   ИИ-хуки
                   <TokenBadge tokens={getTokenCost('ai_hook')} variant="dark" />
@@ -2209,14 +2209,14 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                   }}
                   disabled={!transcript?.trim() && !translation?.trim()}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors whitespace-nowrap',
                     (transcript?.trim() || translation?.trim())
                       ? 'bg-slate-800 hover:bg-slate-900 text-white'
                       : 'bg-slate-300 cursor-not-allowed text-slate-500'
                   )}
                   title="Сгенерировать сценарий по структуре этого виральногo видео"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3 h-3" />
                   ИИ-сценарий
                   <TokenBadge tokens={getTokenCost('sw_full_script')} variant="dark" />
                   <ChevronDown className={cn(
@@ -2230,15 +2230,15 @@ export function VideoDetailPage({ video, onBack, onRefreshData, autoTranscribe }
                       onClick={() => !transcript?.trim() ? toast.error('Сначала добавьте транскрипцию') : setShowStylePickerPopover(!showStylePickerPopover)}
                       disabled={isGeneratingScript || !transcript?.trim() || !canAfford(getTokenCost('generate_script'))}
                       className={cn(
-                        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-medium',
+                        'flex items-center gap-1 px-2.5 py-1 rounded-lg text-white text-[11px] font-medium whitespace-nowrap',
                         transcript?.trim() ? 'bg-slate-600 hover:bg-slate-700 disabled:opacity-50' : 'bg-slate-400/70 cursor-not-allowed'
                       )}
                       title={transcript?.trim() ? 'Выбрать подчерк и сгенерировать' : 'Добавьте транскрипцию для генерации по подчерку'}
                     >
                       {isGeneratingScript ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
-                        <Wand2 className="w-3.5 h-3.5" />
+                        <Wand2 className="w-3 h-3" />
                       )}
                       По подчерку
                       <TokenBadge tokens={getTokenCost('generate_script')} variant="dark" />

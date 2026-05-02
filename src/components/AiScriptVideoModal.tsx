@@ -68,74 +68,103 @@ const LOADING_LINES = [
   'Ещё пара секунд — почти готово',
 ];
 
-// Анимированный RiRi-орб для loading-стейта: пульсация + 3 echo-волны +
-// 6 искорок крутятся по орбите + плавающее движение вверх-вниз.
-// Делаем максимально запоминающимся — чтобы юзер скриншотил и постил.
-function RiriOrb({ size = 100 }: { size?: number }) {
-  const s = size;
+// Брендовый wordmark "RiRi AI" для loading-стейта — крупный, читаемый
+// в скриншотах рилсов. Композиция: маленький 3D-орб + большой текст
+// "RiRi AI" с градиентом + glow + 4 sparkle-точки вокруг.
+// Юзер делает screenshot экрана загрузки и сразу видно "RiRi AI" в кадре.
+function RiriBrand() {
   return (
     <div
-      className="relative flex items-center justify-center select-none"
-      style={{ width: s * 2, height: s * 2 }}
+      className="relative flex flex-col items-center justify-center select-none"
+      style={{ animation: 'ririOrbModalFloat 3.5s ease-in-out infinite' }}
     >
-      {/* Echo волны вокруг орба */}
-      {[0, 1, 2].map((i) => (
-        <div
-          key={`echo-${i}`}
-          className="absolute rounded-full"
-          style={{
-            width: s,
-            height: s,
-            border: '1.5px solid rgba(120, 130, 160, 0.4)',
-            animation: `ririOrbEcho 3.2s ease-out ${i * 1.07}s infinite`,
-          }}
-        />
-      ))}
-
-      {/* Сам орб */}
+      {/* Glow-halo за wordmark'ом */}
       <div
-        className="rounded-full flex-shrink-0 relative"
+        className="absolute"
         style={{
-          width: s,
-          height: s,
-          background: `radial-gradient(circle at 36% 28%, #ffffff 0%, #eceef4 18%, #c8ccd9 42%, #8b91a3 68%, #5a6070 92%)`,
-          boxShadow: `
-            inset ${-s * 0.07}px ${-s * 0.07}px ${s * 0.18}px rgba(40,44,60,0.32),
-            inset ${s * 0.07}px ${s * 0.055}px ${s * 0.16}px rgba(255,255,255,0.85),
-            0 ${s * 0.1}px ${s * 0.42}px rgba(80,88,120,0.25),
-            0 0 ${s * 0.5}px rgba(140,150,180,0.18)
-          `,
-          animation: 'ririOrbModalFloat 3.5s ease-in-out infinite, ririOrbPulse 2.4s ease-in-out infinite',
+          width: 220,
+          height: 80,
+          top: 35,
+          background: 'radial-gradient(ellipse, rgba(99, 102, 241, 0.28) 0%, rgba(168, 85, 247, 0.18) 40%, transparent 70%)',
+          filter: 'blur(18px)',
+          animation: 'ririOrbPulse 2.8s ease-in-out infinite',
         }}
       />
 
-      {/* Орбитальные искорки — 6 штук, разный delay и radius */}
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const angle = (i * 60); // градусы
-        const radius = s * 0.85;
-        return (
+      {/* Маленький 3D-орб как символ */}
+      <div
+        className="rounded-full mb-3 relative z-10"
+        style={{
+          width: 36,
+          height: 36,
+          background: `radial-gradient(circle at 36% 28%, #ffffff 0%, #eceef4 18%, #c8ccd9 42%, #8b91a3 68%, #5a6070 92%)`,
+          boxShadow: `
+            inset -2px -2px 6px rgba(40,44,60,0.32),
+            inset 2px 1.5px 5px rgba(255,255,255,0.85),
+            0 4px 16px rgba(80,88,120,0.3)
+          `,
+          animation: 'ririOrbPulse 2.4s ease-in-out infinite',
+        }}
+      />
+
+      {/* Wordmark "RiRi AI" — крупно, gradient text, видно в скриншотах */}
+      <div className="relative z-10 flex items-baseline gap-1">
+        <span
+          className="font-bold tracking-tight"
+          style={{
+            fontSize: 44,
+            lineHeight: 1,
+            background: 'linear-gradient(135deg, #1e293b 0%, #475569 40%, #6366f1 75%, #a855f7 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            backgroundSize: '200% 200%',
+            animation: 'ririGradientFlow 4s ease-in-out infinite',
+          }}
+        >
+          RiRi
+        </span>
+        <span
+          className="font-bold tracking-tight text-[28px]"
+          style={{
+            background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          AI
+        </span>
+      </div>
+
+      {/* 4 sparkle-точки вокруг wordmark'а */}
+      {[
+        { top: 30, left: -20, delay: 0 },
+        { top: 50, right: -22, delay: 1.2 },
+        { bottom: -8, left: 10, delay: 0.6 },
+        { bottom: 4, right: 8, delay: 1.8 },
+      ].map((s, i) => (
+        <div
+          key={`spark-${i}`}
+          className="absolute z-20"
+          style={{
+            width: 8,
+            height: 8,
+            ...s,
+            animation: `ririSparkleStatic 2.4s ease-in-out ${s.delay}s infinite`,
+          }}
+        >
           <div
-            key={`spark-${i}`}
-            className="absolute"
+            className="rounded-full"
             style={{
-              width: 6,
-              height: 6,
-              animation: `ririOrbSpark 4s linear ${i * 0.4}s infinite`,
-              transform: `rotate(${angle}deg) translateX(${radius}px)`,
+              width: 8,
+              height: 8,
+              background: 'radial-gradient(circle, #ffffff 0%, #c4b5fd 50%, transparent 100%)',
+              boxShadow: '0 0 10px rgba(168,85,247,0.7)',
             }}
-          >
-            <div
-              className="rounded-full"
-              style={{
-                width: 6,
-                height: 6,
-                background: 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
-                boxShadow: '0 0 8px rgba(255,255,255,0.9)',
-              }}
-            />
-          </div>
-        );
-      })}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -179,9 +208,9 @@ function LoadingState() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-      <RiriOrb size={100} />
-      <div className="mt-8 h-12 max-w-sm">
+    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+      <RiriBrand />
+      <div className="mt-10 h-12 max-w-sm">
         <AnimatePresence mode="wait">
           <motion.p
             key={idx}
@@ -189,7 +218,7 @@ function LoadingState() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.4 }}
-            className="text-[14px] leading-relaxed text-slate-600"
+            className="text-[13px] leading-relaxed text-slate-600"
           >
             {LOADING_LINES[idx]}
           </motion.p>
@@ -315,7 +344,11 @@ export function AiScriptVideoModal({
         return;
       }
       if (!data.success) {
-        toast.error(data.message || data.error || 'Не удалось сгенерировать');
+        const friendly = data.message
+          || (data.error?.includes('OpenRouter') || data.error?.includes('Empty')
+            ? 'RiRi не смог уложиться. Попробуй ещё раз — обычно со второго раза получается'
+            : data.error || 'Не удалось сгенерировать');
+        toast.error(friendly);
         setShowCtaPicker(true);
         return;
       }
@@ -359,11 +392,11 @@ export function AiScriptVideoModal({
 
   const openVariant = openIdx !== null ? variants[openIdx] : null;
 
-  // Расчёт ширины и max высоты от viewport
-  const panelWidth = Math.min(500, typeof window !== 'undefined' ? window.innerWidth - 16 : 500);
+  // Расчёт ширины и max высоты от viewport — компактнее (как у ИИ-хуков)
+  const panelWidth = Math.min(420, typeof window !== 'undefined' ? window.innerWidth - 16 : 420);
   const panelMaxHeight = typeof window !== 'undefined'
-    ? Math.min(640, window.innerHeight - anchor.top - 12)
-    : 640;
+    ? Math.min(540, window.innerHeight - anchor.top - 12)
+    : 540;
   // Если кнопка близко к правому краю — анкорим right вместо left
   const leftPos = typeof window !== 'undefined' && anchor.left + panelWidth > window.innerWidth - 8
     ? Math.max(8, window.innerWidth - panelWidth - 8)
@@ -374,21 +407,19 @@ export function AiScriptVideoModal({
       <style>{`
         @keyframes ririOrbModalFloat {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-8px); }
+          50% { transform: translateY(-6px); }
         }
         @keyframes ririOrbPulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.04); }
+          0%, 100% { transform: scale(1); opacity: 0.85; }
+          50% { transform: scale(1.05); opacity: 1; }
         }
-        @keyframes ririOrbEcho {
-          0% { transform: scale(1); opacity: 0.55; }
-          100% { transform: scale(2.2); opacity: 0; }
+        @keyframes ririGradientFlow {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
         }
-        @keyframes ririOrbSpark {
-          0% { transform: rotate(0deg) translateX(var(--r, 85px)) scale(1); opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { transform: rotate(360deg) translateX(var(--r, 85px)) scale(0.6); opacity: 0; }
+        @keyframes ririSparkleStatic {
+          0%, 100% { opacity: 0; transform: scale(0.6); }
+          50% { opacity: 1; transform: scale(1); }
         }
       `}</style>
       {/* Click outside для закрытия */}

@@ -2271,8 +2271,17 @@ ${videosBlock}
         response_format: { type: 'json_object' },
       },
     );
-    if (!rawText) return res.status(502).json({ error: 'Empty response' });
-    const parsed = parseJsonResponse(rawText);
+    if (!rawText) {
+      console.error('generate-full-script: all models returned empty');
+      return res.status(502).json({ error: 'Empty response from LLM' });
+    }
+    let parsed;
+    try {
+      parsed = parseJsonResponse(rawText);
+    } catch (parseErr) {
+      console.error('generate-full-script: JSON parse failed', { rawTextLen: rawText.length, head: rawText.slice(0, 200), err: parseErr.message });
+      return res.status(502).json({ error: 'LLM returned malformed JSON', details: parseErr.message });
+    }
 
     // Дополняем source_reference + original тексты из retrieved-видео
     // (юзер сможет в UI сравнить переписанный сценарий с тем, что было в вирусе)
