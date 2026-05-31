@@ -83,6 +83,9 @@ export interface UseInboxVideosOptions {
   folderId?: string | null;
   /** Сортировка — применяется на уровне БД для views/likes/date/recent; viral сортируется на клиенте */
   sortBy?: InboxSortBy;
+  /** Фильтр по дате публикации (taken_at), unix-секунды. null/undefined = без границы. Применяется на сервере. */
+  dateFrom?: number | null;
+  dateTo?: number | null;
 }
 
 /**
@@ -91,7 +94,7 @@ export interface UseInboxVideosOptions {
  * При передаче folderId загрузка и пагинация работают только по видео в этой папке.
  */
 export function useInboxVideos(options?: UseInboxVideosOptions) {
-  const { folderId: filterFolderId, sortBy = 'recent' } = options ?? {};
+  const { folderId: filterFolderId, sortBy = 'recent', dateFrom = null, dateTo = null } = options ?? {};
   const [videos, setVideos] = useState<IncomingVideo[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -353,11 +356,15 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
           .eq('user_id', userId);
       }
       
+      // Фильтр по диапазону дат публикации (taken_at) — на сервере, чтобы пагинация была корректной
+      if (dateFrom != null) query = query.gte('taken_at', dateFrom);
+      if (dateTo != null) query = query.lte('taken_at', dateTo);
+
       const orderConfig = getOrderConfig();
       const orderQuery = 'nullsFirst' in orderConfig
         ? query.order(orderConfig.column, { ascending: orderConfig.ascending, nullsFirst: orderConfig.nullsFirst })
         : query.order(orderConfig.column, { ascending: orderConfig.ascending });
-      
+
       // Для views_from_avg — загружаем все в папке (сортировка по отклонению на клиенте); viral уже в БД — пагинация как обычно
       const needsFullSort = sortBy === 'views_from_avg' && filterFolderId !== undefined;
       const initialLimit = needsFullSort ? FULL_SORT_LIMIT : PAGE_SIZE;
@@ -389,7 +396,7 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     } finally {
       setLoading(false);
     }
-  }, [setIncomingVideos, transformVideo, getUserId, currentProjectId, filterFolderId, sortBy, getOrderConfig, fetchFolderCounts, tableOrView]);
+  }, [setIncomingVideos, transformVideo, getUserId, currentProjectId, filterFolderId, sortBy, dateFrom, dateTo, getOrderConfig, fetchFolderCounts, tableOrView]);
 
   // Подгрузить следующую страницу (для проектов с большим количеством видео)
   // Пагинация учитывает folderId — подгружаем следующие страницы только из выбранной папки
@@ -432,6 +439,10 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
         query = query.is('project_id', null).eq('user_id', userId);
       }
       
+      // Тот же фильтр по диапазону дат публикации, что и при первой загрузке
+      if (dateFrom != null) query = query.gte('taken_at', dateFrom);
+      if (dateTo != null) query = query.lte('taken_at', dateTo);
+
       const offset = videos.length;
       const orderConfig = getOrderConfig();
       const orderQuery = 'nullsFirst' in orderConfig
@@ -454,14 +465,14 @@ export function useInboxVideos(options?: UseInboxVideosOptions) {
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, loading, getUserId, currentProjectId, videos.length, transformVideo, setIncomingVideos, filterFolderId, getOrderConfig, tableOrView]);
+  }, [hasMore, loadingMore, loading, getUserId, currentProjectId, videos.length, transformVideo, setIncomingVideos, filterFolderId, dateFrom, dateTo, getOrderConfig, tableOrView]);
 
   // Перезагружаем видео при смене пользователя, проекта, папки или сортировки
   useEffect(() => {
     if (user) {
       fetchVideos();
     }
-  }, [user, currentProjectId, filterFolderId, sortBy, fetchVideos]);
+  }, [user, currentProjectId, filterFolderId, sortBy, dateFrom, dateTo, fetchVideos]);
 
   // Слушаем события обновления видео от других участников проекта
   useEffect(() => {
